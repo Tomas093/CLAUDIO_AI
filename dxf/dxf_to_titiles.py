@@ -80,9 +80,9 @@ def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300)
 
 # --- EJECUCIÓN ---
 generar_tiles_manuales(
-    dxf_path="Tablerotsbe.dxf",
+    dxf_path="jijiji.dxf",
     output_folder="./tiles_output_manual",
-    tile_size= 5,
-    overlap= 3.0,
+    tile_size= 20,
+    overlap= 5,
     dpi=300
 )
