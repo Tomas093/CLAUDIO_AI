@@ -59,7 +59,7 @@ def render_dxf_to_rgba(dxf_path: Path, dpi: int = RENDER_DPI) -> np.ndarray:
     return rgba
 
 
-def crop_to_content(rgba: np.ndarray, padding: int = 8) -> np.ndarray:
+def crop_to_content(rgba: np.ndarray, padding: int = 75) -> np.ndarray:
     alpha = rgba[:, :, 3]
     rows = np.any(alpha > 0, axis=1)
     cols = np.any(alpha > 0, axis=0)
