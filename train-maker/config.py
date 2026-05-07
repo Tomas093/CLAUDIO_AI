@@ -5,7 +5,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # ── Rutas de entrada ──────────────────────────────────────────────────────
 INPUT_DIR        = BASE_DIR / "input"
-DXF_FILE         = INPUT_DIR / "component.dxf"
+DXF_FILE         = INPUT_DIR / "component_2.dxf"
 BACKGROUNDS_DIR  = INPUT_DIR / "backgrounds"
 
 # ── Rutas de salida ───────────────────────────────────────────────────────
@@ -32,5 +32,5 @@ ALLOW_RANDOM_ROTATION  = True # Rota el sprite antes de pegarlo al plano
 # ── Fase 4: Ensamblaje del Dataset ────────────────────────────────────────
 TRAIN_RATIO    = 0.80   # 80% entrenamiento
 NEGATIVE_RATIO = 0.15   # 15% del dataset total serán negativos (sin componente)
-CLASS_ID       = 0      # Índice de clase YOLO
-CLASS_NAME     = "interruptor_termomagnetico"  # Nombre del componente (usado en data.yaml)
+CLASS_ID       = 1      # Índice de clase YOLO
+CLASS_NAME     = "interruptor_diferencial"   # Nombre del componente (usado en data.yaml)

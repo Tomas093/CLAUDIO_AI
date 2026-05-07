@@ -1,9 +1,10 @@
 # Liard — Dataset Config (auto-generado)
 
-path: C:\Users\Tomas\Documents\LAB3\CLAUDIO_AI\train-maker\dataset
+path: C:\Users\Tomas\Documents\LAB3\CLAUDIO_AI\train-maker\datasets\dataset_unified
 train: train/images
 val:   val/images
 
-nc: 1
+nc: 2
 names:
   0: interruptor_termomagnetico
+  1: interruptor_diferencial
