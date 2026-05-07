@@ -1,1 +1,70 @@
-.jpg
+# Archivos de imagen
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+*.webp
+*.tiff
+*.ico
+*.psd
+*.txt
+
+
+
+# Directorios de datos
+dataset/
+datasets/
+data/
+__pycache__/
+
+# Archivos de Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Entornos virtuales
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+../.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Archivos de sistema
+.env
+.env.local
+*.log
+*.pot
+
+# Directorios de salida
+output/
+runs/
+results/
+
