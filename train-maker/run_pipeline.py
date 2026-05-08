@@ -1,71 +1,197 @@
-import time
+# run_pipeline.py — Phase 5: Master Controller
+# Iterates through every component defined in components_config.yaml,
+# runs Phases 0→4 sequentially, then assembles the unified dataset,
+# validates it, and optionally kicks off YOLO training.
+from __future__ import annotations
 
-from config import BACKGROUNDS_DIR, DATASET_DIR, DXF_FILE, N_SPRITE_VARIATIONS, N_SYNTHETIC_TOTAL, SPRITES_DIR, SYNTHETIC_DIR, TRAIN_RATIO, NEGATIVE_RATIO
+import sys
+import time
+from pathlib import Path
+
+from config import load_config, PipelineConfig, ComponentConfig
+from generate_backgrounds import generate_backgrounds
 from phase1_extractor import generate_sprite_variations
 from phase2_3_fusion_labeler import generate_synthetic_dataset
-from phase4_assembler import assemble_dataset
+from phase4_assembler import (
+    assemble_dataset,
+    create_yolo_structure,
+    generate_yolo_yaml,
+    inject_negatives,
+    print_dataset_summary,
+    split_and_copy,
+    _collect_all_component_images,
+)
+from validate_dataset import validate_dataset
 
 
-def run_pipeline() -> None:
+def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
+    """Run Phase 1 + Phase 2/3 for a single component."""
+
+    sprites_dir = cfg.component_sprites_dir(comp)
+    synthetic_dir = cfg.component_synthetic_dir(comp)
+
+    # ── Phase 1: Sprite extraction ────────────────────────────────────────
+    print(f"  ▶ FASE 1 — Sprites de '{comp.name}'")
+    t0 = time.time()
+    generate_sprite_variations(
+        dxf_path=comp.dxf_path,
+        output_dir=sprites_dir,
+        n_variations=comp.sprite_variations,
+        kernel_min=comp.line_thickness_range[0],
+        kernel_max=comp.line_thickness_range[1],
+        dpi=cfg.g.render_dpi,
+        component_name=comp.name,
+    )
+    print(f"    ⏱  {time.time() - t0:.1f}s\n")
+
+    # ── Phase 2/3: Synthetic image generation ─────────────────────────────
+    print(f"  ▶ FASES 2/3 — Generación sintética de '{comp.name}'")
+    t0 = time.time()
+    generate_synthetic_dataset(
+        sprites_dir=sprites_dir,
+        bg_dir=cfg.g.backgrounds_dir,
+        output_dir=synthetic_dir,
+        n_total=comp.images_to_generate,
+        component_name=comp.name,
+        class_id=comp.class_id,
+        sprite_scale_min=cfg.g.sprite_scale_min,
+        sprite_scale_max=cfg.g.sprite_scale_max,
+        components_min=cfg.g.components_per_img_min,
+        components_max=cfg.g.components_per_img_max,
+        allow_rotation=cfg.g.allow_random_rotation,
+    )
+    print(f"    ⏱  {time.time() - t0:.1f}s\n")
+
+
+def run_pipeline(auto_train: bool = True) -> None:
+    """Execute the full LIARD pipeline end-to-end.
+
+    Parameters
+    ----------
+    auto_train : bool
+        If *True* (default), automatically invoke YOLO training after
+        validation passes.  Set to *False* for data-generation-only runs.
+    """
+
+    cfg = load_config()
+
     print("\n" + "═" * 60)
     print("  LIARD — Synthetic Data Generation Pipeline")
-    print("═" * 60 + "\n")
+    print("═" * 60)
+    print(f"  Componentes: {len(cfg.components)}")
+    for c in cfg.components:
+        print(f"    [{c.class_id}] {c.name}  →  {c.images_to_generate} imgs")
+    if cfg.backgrounds.enabled:
+        print(f"  Backgrounds: auto-generados desde '{cfg.backgrounds.dxf_sources_dir}'")
+    print()
 
     t_global = time.time()
 
-    if not DXF_FILE.exists():
+    # ── Validate component DXFs ───────────────────────────────────────────
+    for comp in cfg.components:
+        if not comp.dxf_path.exists():
+            raise FileNotFoundError(
+                f"No se encontró el archivo DXF: {comp.dxf_path}\n"
+                f"Componente: {comp.name}"
+            )
+
+    # ── Phase 0: Background generation from DXF floor plans ──────────────
+    if cfg.backgrounds.enabled:
+        print(f"\n{'─' * 60}")
+        print("  ▶ FASE 0 — Generación de Backgrounds desde planos DXF")
+        print(f"{'─' * 60}\n")
+
+        t0 = time.time()
+        n_tiles = generate_backgrounds()
+        print(f"    ⏱  {time.time() - t0:.1f}s\n")
+
+        if n_tiles == 0:
+            print("  ⚠️  No se generaron backgrounds. Verificá que haya .dxf en:")
+            print(f"      {cfg.backgrounds.dxf_sources_dir}")
+
+    # ── Validate backgrounds exist ────────────────────────────────────────
+    bg_dir = cfg.g.backgrounds_dir
+    has_backgrounds = bg_dir.exists() and any(bg_dir.iterdir())
+    if not has_backgrounds:
         raise FileNotFoundError(
-            f"No se encontró el archivo DXF: {DXF_FILE}\n"
-            "Coloca tu archivo .dxf en la carpeta 'input/'."
-        )
-    if not BACKGROUNDS_DIR.exists() or not any(BACKGROUNDS_DIR.iterdir()):
-        raise FileNotFoundError(
-            f"La carpeta de fondos está vacía: {BACKGROUNDS_DIR}\n"
-            "Agrega imágenes de planos reales (sin componentes)."
+            f"La carpeta de fondos está vacía: {bg_dir}\n"
+            "Opciones:\n"
+            "  1. Poné imágenes de planos reales en esa carpeta, o\n"
+            "  2. Configurá backgrounds.enabled: true y poné .dxf en\n"
+            f"     {cfg.backgrounds.dxf_sources_dir}"
         )
 
-    print("▶ FASE 1 — Extracción y Variación de Sprites")
+    # ── Per-component generation (Phase 1 + 2/3) ─────────────────────────
+    for comp in cfg.components:
+        print(f"\n{'─' * 60}")
+        print(f"  COMPONENTE: {comp.name}  (class_id={comp.class_id})")
+        print(f"{'─' * 60}\n")
+        _process_component(cfg, comp)
+
+    # ── Phase 4: Assemble unified dataset ─────────────────────────────────
+    print(f"\n{'─' * 60}")
+    print("  ▶ FASE 4 — Ensamblaje del Dataset (Split 80/10/10)")
+    print(f"{'─' * 60}\n")
+
     t0 = time.time()
-    generate_sprite_variations(
-        dxf_path=DXF_FILE,
-        output_dir=SPRITES_DIR,
-        n_variations=N_SPRITE_VARIATIONS,
+
+    import shutil
+    if cfg.g.dataset_dir.exists():
+        shutil.rmtree(cfg.g.dataset_dir)
+
+    dirs = create_yolo_structure(cfg.g.dataset_dir)
+    pairs = _collect_all_component_images(cfg)
+
+    if not pairs:
+        raise RuntimeError("No se generaron imágenes sintéticas. Revisá los DXF y fondos.")
+
+    split_and_copy(
+        pairs, dirs,
+        train_ratio=cfg.g.train_ratio,
+        val_ratio=cfg.g.val_ratio,
     )
+    inject_negatives(dirs, cfg.g.backgrounds_dir, cfg.g.negative_ratio)
+    yaml_path = generate_yolo_yaml(cfg.g.dataset_dir, cfg)
+    print_dataset_summary(cfg.g.dataset_dir)
     print(f"  ⏱  {time.time() - t0:.1f}s\n")
 
-    print("▶ FASES 2/3 — Fusión con Ruido + Auto-Etiquetado YOLO")
+    # ── Phase 4b: Validation (sanity checks + bbox clipping) ─────────────
+    print(f"\n{'─' * 60}")
+    print("  ▶ VALIDACIÓN — Sanity Checks + Clipping de Bounding Boxes")
+    print(f"{'─' * 60}\n")
+
     t0 = time.time()
-    generate_synthetic_dataset(
-        sprites_dir=SPRITES_DIR,
-        bg_dir=BACKGROUNDS_DIR,
-        output_dir=SYNTHETIC_DIR,
-        n_total=N_SYNTHETIC_TOTAL,
-    )
+    val_stats = validate_dataset(cfg.g.dataset_dir)
     print(f"  ⏱  {time.time() - t0:.1f}s\n")
 
-    print("▶ FASE 4 — Ensamblaje del Dataset (Split + Negative Mining)")
-    t0 = time.time()
-    yaml_path = assemble_dataset(
-        synthetic_dir=SYNTHETIC_DIR,
-        bg_dir=BACKGROUNDS_DIR,
-        dataset_dir=DATASET_DIR,
-        train_ratio=TRAIN_RATIO,
-        negative_ratio=NEGATIVE_RATIO,
-    )
-    print(f"  ⏱  {time.time() - t0:.1f}s\n")
+    if val_stats["images_deleted"] > 0:
+        print(f"  ⚠️  Se eliminaron {val_stats['images_deleted']} imágenes con labels irrecuperables.")
 
+    # ── Summary ───────────────────────────────────────────────────────────
     elapsed = time.time() - t_global
     print("═" * 60)
     print(f"  ✅ Pipeline completado en {elapsed:.1f}s")
-    print(f"  📁 Dataset en:   {DATASET_DIR.resolve()}")
+    print(f"  📁 Dataset en:   {cfg.g.dataset_dir.resolve()}")
     print(f"  📄 Config YOLO:  {yaml_path.resolve()}")
-    print()
-    print("  🚀 Para entrenar:")
-    # Recomendar uso del modelo 'medium' en lugar de 'nano'
-    print(f"     yolo train data={yaml_path} model=yolov8m.pt epochs=100 imgsz=640")
-    print("═" * 60 + "\n")
+
+    # ── Phase 5: Training ─────────────────────────────────────────────────
+    if auto_train:
+        print()
+        print(f"  🚀 Iniciando entrenamiento...")
+        print(f"     Modelo: {cfg.g.yolo_model}")
+        print(f"     Batch:  {cfg.g.batch_size}  |  Workers: {cfg.g.workers}")
+        print("═" * 60 + "\n")
+
+        from train import train_model
+        train_model(data_yaml=yaml_path)
+    else:
+        print()
+        print("  🚀 Para entrenar manualmente:")
+        print(f"     python train.py")
+        print("═" * 60 + "\n")
 
 
 if __name__ == "__main__":
-    run_pipeline()
-
+    # Pass --no-train to skip automatic training
+    auto = "--no-train" not in sys.argv
+    run_pipeline(auto_train=auto)

@@ -1,6 +1,12 @@
+# phase2_3_fusion_labeler.py — Synthetic image generation + YOLO auto-labelling
+# Phase 2 requirements: idempotent wipe, component-prefixed names,
+# batched/generator loop with immediate cv2.imwrite (no 10k images in RAM).
+from __future__ import annotations
+
+import random
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
-import random
 
 import cv2
 import numpy as np
@@ -196,6 +202,12 @@ def generate_one_sample(
         bg_paths: list[Path],
         out_img_path: Path,
         out_label_path: Path,
+        class_id: int = CLASS_ID,
+        sprite_scale_min: float = SPRITE_SCALE_MIN,
+        sprite_scale_max: float = SPRITE_SCALE_MAX,
+        components_min: int = COMPONENTS_PER_IMG_MIN,
+        components_max: int = COMPONENTS_PER_IMG_MAX,
+        allow_rotation: bool = ALLOW_RANDOM_ROTATION,
 ) -> None:
     bg = cv2.imread(str(random.choice(bg_paths)))
     if bg is None: return
@@ -214,7 +226,7 @@ def generate_one_sample(
         bg = cv2.bitwise_not(bg)
 
     h_bg, w_bg = bg.shape[:2]
-    n = random.randint(COMPONENTS_PER_IMG_MIN, COMPONENTS_PER_IMG_MAX)
+    n = random.randint(components_min, components_max)
     bboxes: list[YoloBBox] = []
 
     for _ in range(n):
@@ -239,13 +251,13 @@ def generate_one_sample(
         canvas, base_roi = build_modular_sprite(base_raw, mod_raw)
 
         # 3. ROTACIÓN
-        if ALLOW_RANDOM_ROTATION:
+        if allow_rotation:
             angle = random.choice([0, 90, 180, 270])
             if angle != 0:
                 canvas, base_roi = rotate_sprite_and_track_bbox(canvas, angle, base_roi)
 
         # 4. ESCALADO
-        scale = random.uniform(SPRITE_SCALE_MIN, SPRITE_SCALE_MAX)
+        scale = random.uniform(sprite_scale_min, sprite_scale_max)
         canvas, base_roi = scale_canvas_and_roi(canvas, base_roi, scale)
 
         c_h, c_w = canvas.shape[:2]
@@ -263,7 +275,7 @@ def generate_one_sample(
         final_x = px + bx
         final_y = py + by
 
-        bbox = calculate_yolo_bbox(final_x, final_y, bw, bh, w_bg, h_bg)
+        bbox = calculate_yolo_bbox(final_x, final_y, bw, bh, w_bg, h_bg, class_id=class_id)
         bboxes.append(bbox)
 
         # 7. Agregar texto basura cerca del componente (Ruido visual para la IA)
@@ -290,7 +302,32 @@ def generate_synthetic_dataset(
         bg_dir: Path = BACKGROUNDS_DIR,
         output_dir: Path = SYNTHETIC_DIR,
         n_total: int = N_SYNTHETIC_TOTAL,
+        component_name: str = "",
+        class_id: int = CLASS_ID,
+        sprite_scale_min: float = SPRITE_SCALE_MIN,
+        sprite_scale_max: float = SPRITE_SCALE_MAX,
+        components_min: int = COMPONENTS_PER_IMG_MIN,
+        components_max: int = COMPONENTS_PER_IMG_MAX,
+        allow_rotation: bool = ALLOW_RANDOM_ROTATION,
 ) -> tuple[list[Path], list[Path]]:
+    """Generate synthetic images with YOLO labels.
+
+    **Idempotency**: wipes *output_dir* before generating to prevent
+    duplicates on restart after interruption.
+
+    **Memory management**: uses a plain ``for`` loop that writes each
+    image to disk via ``cv2.imwrite`` immediately — no accumulation of
+    pixel arrays in RAM.  Only lightweight ``Path`` references are kept.
+
+    **Naming**: ``{component_name}_img0001.jpg`` / ``.txt`` when
+    *component_name* is provided.
+    """
+
+    # ── Idempotency: clean slate ──────────────────────────────────────────
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     # Cargamos tanto las bases como los modificadores
     sprites_base = load_rgba_images(sprites_dir)
     sprites_modifiers = load_rgba_images(MODIFIERS_DIR)
@@ -299,21 +336,31 @@ def generate_synthetic_dataset(
     print(
         f"[Fase 2/3] {len(sprites_base)} bases | {len(sprites_modifiers)} modificadores | {len(bg_paths)} fondos | {n_total} muestras")
 
+    prefix = f"{component_name}_" if component_name else ""
+
     img_paths: list[Path] = []
     lbl_paths: list[Path] = []
     imgs_dir = output_dir / "images"
     lbls_dir = output_dir / "labels"
 
     for i in range(n_total):
-        stem = f"synth_{i:05d}"
+        stem = f"{prefix}img{i:04d}"
         i_path = imgs_dir / f"{stem}.jpg"
         l_path = lbls_dir / f"{stem}.txt"
 
-        generate_one_sample(sprites_base, sprites_modifiers, bg_paths, i_path, l_path)
+        generate_one_sample(
+            sprites_base, sprites_modifiers, bg_paths, i_path, l_path,
+            class_id=class_id,
+            sprite_scale_min=sprite_scale_min,
+            sprite_scale_max=sprite_scale_max,
+            components_min=components_min,
+            components_max=components_max,
+            allow_rotation=allow_rotation,
+        )
         img_paths.append(i_path)
         lbl_paths.append(l_path)
 
-        if (i + 1) % 100 == 0 or (i + 1) == n_total:
+        if (i + 1) % 500 == 0 or (i + 1) == n_total:
             print(f"  Generadas {i + 1:>5}/{n_total} muestras...")
 
     print(f"[Fase 2/3] ✅ Dataset sintético guardado en '{output_dir}'\n")

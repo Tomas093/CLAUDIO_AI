@@ -1,4 +1,10 @@
+# phase1_extractor.py — Sprite extraction from DXF with per-component naming
+# Phase 2 requirements: idempotent (wipes target dir before start),
+# component-prefixed filenames, incremental disk writes (no mass RAM).
+from __future__ import annotations
+
 import io
+import shutil
 from pathlib import Path
 
 import cv2
@@ -24,6 +30,7 @@ from config import (
 
 
 def render_dxf_to_rgba(dxf_path: Path, dpi: int = RENDER_DPI) -> np.ndarray:
+    """Render a DXF file to an RGBA numpy array with transparent background."""
     doc = ezdxf.readfile(str(dxf_path))
     msp = doc.modelspace()
 
@@ -60,6 +67,7 @@ def render_dxf_to_rgba(dxf_path: Path, dpi: int = RENDER_DPI) -> np.ndarray:
 
 
 def crop_to_content(rgba: np.ndarray, padding: int = 75) -> np.ndarray:
+    """Crop an RGBA image to its non-transparent bounding box + padding."""
     alpha = rgba[:, :, 3]
     rows = np.any(alpha > 0, axis=1)
     cols = np.any(alpha > 0, axis=0)
@@ -79,6 +87,7 @@ def crop_to_content(rgba: np.ndarray, padding: int = 75) -> np.ndarray:
 
 
 def apply_dilation(rgba: np.ndarray, kernel_size: int) -> np.ndarray:
+    """Dilate the alpha channel to simulate thicker drawing lines."""
     if kernel_size <= 1:
         return rgba.copy()
 
@@ -98,8 +107,26 @@ def generate_sprite_variations(
     kernel_min: int = DILATION_KERNEL_MIN,
     kernel_max: int = DILATION_KERNEL_MAX,
     dpi: int = RENDER_DPI,
+    component_name: str = "",
 ) -> list[Path]:
+    """Generate *n_variations* sprite PNGs with incremental line thickness.
+
+    **Idempotency**: wipes *output_dir* before generating to avoid duplicates
+    if the process was previously interrupted.
+
+    **Memory**: each sprite is written to disk immediately after creation —
+    no list of images is held in RAM.
+
+    **Naming**: files are prefixed with *component_name* when provided,
+    e.g. ``interruptor_termomagnetico_sprite_001_k5.png``.
+    """
+
+    # ── Idempotency: clean slate ──────────────────────────────────────────
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    prefix = f"{component_name}_" if component_name else ""
 
     print(f"[Fase 1] Renderizando DXF base: {dxf_path.name}...")
     base_rgba = render_dxf_to_rgba(dxf_path, dpi=dpi)
@@ -114,11 +141,13 @@ def generate_sprite_variations(
     generated: list[Path] = []
     for i, k in enumerate(kernels):
         sprite = apply_dilation(base_rgba, k)
-        out_path = output_dir / f"sprite_{i:03d}_k{k:02d}.png"
+        out_path = output_dir / f"{prefix}sprite_{i:04d}_k{k:02d}.png"
+        # Incremental write — sprite is freed at end of loop iteration
         Image.fromarray(sprite).save(out_path, format="PNG")
         generated.append(out_path)
-        print(f"  [{i + 1:3d}/{n_variations}] {out_path.name}  (kernel={k})")
+
+        if (i + 1) % 50 == 0 or (i + 1) == n_variations:
+            print(f"  [{i + 1:3d}/{n_variations}] {out_path.name}  (kernel={k})")
 
     print(f"[Fase 1] ✅ {len(generated)} sprites guardados en '{output_dir}'\n")
     return generated
-

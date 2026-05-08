@@ -1,0 +1,110 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# LIARD — Multi-Component Synthetic Dataset Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+# This file drives the entire pipeline. Each component listed below will be
+# processed sequentially: sprites extracted → synthetic images fused → dataset
+# assembled → validated → split → YOLO data.yaml generated.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Global Settings ───────────────────────────────────────────────────────────
+global:
+  # I/O paths (relative to train-maker/)
+  backgrounds_dir: "input/backgrounds"
+  output_dir: "output"
+  dataset_dir: "dataset"
+
+  # Dataset split ratios (must sum to 1.0)
+  train_ratio: 0.80
+  val_ratio:   0.10
+  test_ratio:  0.10
+
+  # Negative-sample injection (fraction of total dataset)
+  negative_ratio: 0.15
+
+  # Hardware constraints — prevents OOM on 8 GB VRAM GPUs
+  batch_size: 16
+  workers: 4
+
+  # Rendering defaults
+  render_dpi: 200
+  binarize_threshold: 200
+
+  # Synthetic image composition
+  sprite_scale_min: 0.08
+  sprite_scale_max: 0.25
+  components_per_img_min: 1
+  components_per_img_max: 5
+  allow_random_rotation: true
+
+  # YOLO training
+  yolo_model: "yolov8m.pt"
+  epochs: 100
+  imgsz: 640
+  patience: 20
+  project: "Liard_Detection"
+
+# ── Background Generation from DXF Floor Plans ───────────────────────────────
+# Put your full electrical floor plan DXFs here and the pipeline will render
+# them, slice into tiles, and populate backgrounds_dir automatically.
+# Set "enabled: false" or remove the section to skip (use existing backgrounds).
+backgrounds:
+  enabled: true
+  dxf_sources_dir: "input/planos_completos"   # folder with full-plan .dxf files
+  tile_size: 640                               # tile size in pixels
+  overlap: 320                                 # overlap between tiles (pixels)
+  render_dpi: 4098                             # high DPI for full plans
+  min_std_dev: 10                              # discard blank tiles (std < this)
+
+# ── Training Augmentation ─────────────────────────────────────────────────────
+# Controls YOLO's built-in augmentation during training.
+# IMPORTANT for synthetic data: aggressive augmentation prevents overfitting
+# (the model memorising your sprites instead of learning real patterns).
+# All values are passed directly to model.train().
+# Docs: https://docs.ultralytics.com/modes/train/#augmentation-settings
+augmentation:
+  hsv_h: 0.015          # Hue shift (fraction of 360°)
+  hsv_s: 0.7            # Saturation shift
+  hsv_v: 0.4            # Value/brightness shift
+  degrees: 15.0         # Random rotation ±degrees
+  translate: 0.1        # Random translation ±fraction of image
+  scale: 0.5            # Random scale gain ±fraction
+  shear: 2.0            # Random shear ±degrees
+  perspective: 0.0      # Perspective distortion (0 = off)
+  flipud: 0.1           # Vertical flip probability
+  fliplr: 0.5           # Horizontal flip probability
+  mosaic: 1.0           # Mosaic augmentation probability (very effective)
+  mixup: 0.15           # MixUp augmentation probability
+  copy_paste: 0.1       # Copy-paste augmentation probability
+  erasing: 0.4          # Random erasing probability
+
+# ── Validation Safety ─────────────────────────────────────────────────────────
+# If more than this % of images are missing labels after assembly, the pipeline
+# aborts — this catches bugs in Phase 2/3 that silently drop .txt files.
+validation:
+  max_missing_labels_pct: 5.0   # abort if > 5% of labels are missing
+
+# ── Component Definitions ─────────────────────────────────────────────────────
+# Add one entry per electrical component you want to detect.
+# The pipeline will assign sequential class IDs (0, 1, 2, …) in list order.
+components:
+  - name: "interruptor_termomagnetico"
+    dxf_path: "input/component.dxf"           # relative to train-maker/
+    images_to_generate: 10000
+    sprite_variations: 150
+    line_thickness_range: [2, 150]
+    polarity_filters: []                        # e.g., ["invert", "threshold"]
+
+  # ── Example: uncomment and duplicate for more components ─────────────────
+  # - name: "contactor"
+  #   dxf_path: "dxf/contactor.dxf"
+  #   images_to_generate: 10000
+  #   sprite_variations: 150
+  #   line_thickness_range: [2, 150]
+  #   polarity_filters: ["invert"]
+  #
+  # - name: "rele_termico"
+  #   dxf_path: "dxf/rele_termico.dxf"
+  #   images_to_generate: 8000
+  #   sprite_variations: 120
+  #   line_thickness_range: [2, 120]
+  #   polarity_filters: []

@@ -1,26 +1,83 @@
-from ultralytics import YOLO
+# train.py — Phase 5: YOLO training with strict VRAM control
+# Uses the Ultralytics Python API with hardware constraints from
+# components_config.yaml.  Disables auto-batching.
+from __future__ import annotations
+
+from pathlib import Path
+
 import torch
+from ultralytics import YOLO
 
-def train_model():
-    # Usar el modelo 'medium' en lugar de 'nano'
-    model = YOLO('yolov8n.pt')
+from config import load_config
 
-    device = 0 if torch.cuda.is_available() else 'cpu'
-    print(f"Entrenando en: {device}")
+
+def train_model(data_yaml: Path | None = None) -> None:
+    """Launch YOLOv8 training using settings from the pipeline config.
+
+    Parameters
+    ----------
+    data_yaml : Path, optional
+        Explicit path to ``data.yaml``.  When *None* the path is
+        resolved from ``components_config.yaml → dataset_dir/data.yaml``.
+    """
+
+    cfg = load_config()
+
+    if data_yaml is None:
+        data_yaml = cfg.g.dataset_dir / "data.yaml"
+
+    if not data_yaml.exists():
+        raise FileNotFoundError(
+            f"data.yaml no encontrado: {data_yaml}\n"
+            "Ejecutá el pipeline completo antes de entrenar."
+        )
+
+    model_path = Path(__file__).resolve().parent / cfg.g.yolo_model
+    model = YOLO(str(model_path))
+
+    device = 0 if torch.cuda.is_available() else "cpu"
+    print(f"[Training] Dispositivo: {device}")
+    print(f"[Training] Modelo: {cfg.g.yolo_model}")
+    print(f"[Training] Batch size: {cfg.g.batch_size} (auto-batch DESACTIVADO)")
+    print(f"[Training] Workers: {cfg.g.workers}")
+    print(f"[Training] data.yaml: {data_yaml.resolve()}")
+
+    aug = cfg.augmentation
+    print(f"[Training] Augmentation: degrees={aug.degrees}, mosaic={aug.mosaic}, "
+          f"mixup={aug.mixup}, scale={aug.scale}, erasing={aug.erasing}")
 
     model.train(
-        # ACÁ ESTÁ EL ARREGLO: Ruta absoluta con una "r" antes de las comillas
-        data=r'C:\Users\Tomas\Documents\LAB3\CLAUDIO_AI\train-maker\dataset',
-        epochs=100,
-        imgsz=640,
-        batch=32,
-        name='liard_multiclase_v1',
+        data=str(data_yaml.resolve()),
+        epochs=cfg.g.epochs,
+        imgsz=cfg.g.imgsz,
+        batch=cfg.g.batch_size,          # Strict — no auto-batch
+        workers=cfg.g.workers,           # Prevents OOM on dataloaders
+        name=f"{cfg.g.project}_v1",
+        project=cfg.g.project,
         device=device,
-        patience=20,
-        augment=True
+        patience=cfg.g.patience,
+        # ── Augmentation (from components_config.yaml) ────────────────
+        # Controlled via YAML to prevent overfitting on synthetic sprites.
+        hsv_h=aug.hsv_h,
+        hsv_s=aug.hsv_s,
+        hsv_v=aug.hsv_v,
+        degrees=aug.degrees,
+        translate=aug.translate,
+        scale=aug.scale,
+        shear=aug.shear,
+        perspective=aug.perspective,
+        flipud=aug.flipud,
+        fliplr=aug.fliplr,
+        mosaic=aug.mosaic,
+        mixup=aug.mixup,
+        copy_paste=aug.copy_paste,
+        erasing=aug.erasing,
+        # Tracking (W&B / MLflow)
+        # Set WANDB_MODE=online or configure mlflow before running.
     )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print("CUDA disponible:", torch.cuda.is_available())
     print("Versión CUDA de PyTorch:", torch.version.cuda)
     print("Cantidad de GPUs:", torch.cuda.device_count())
