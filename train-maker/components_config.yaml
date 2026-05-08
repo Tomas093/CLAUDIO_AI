@@ -83,6 +83,19 @@ augmentation:
 validation:
   max_missing_labels_pct: 5.0   # abort if > 5% of labels are missing
 
+# ── Modifiers (polos, símbolos extra, etc.) ───────────────────────────────────
+# Images placed in the modifiers directory are randomly composited on TOP of
+# the base sprite before pasting onto the background.  This simulates the
+# "/", "//", "///" pole symbols and other annotations found in real plans.
+# All randomness is per-component-instance within each synthetic image.
+modifiers:
+  dir: "input/modifiers"      # folder with modifier PNGs (transparent)
+  probability: 0.70           # prob. of attaching ANY modifier (0.0–1.0)
+  count_min: 1                # min modifiers per sprite (when used)
+  count_max: 1                # max modifiers per sprite (when used)
+  allow_rotation: true        # randomly rotate modifier (0/90/180/270)
+  thickness_dilation: [1, 3]  # random extra dilation on modifier [min, max]
+
 # ── Component Definitions ─────────────────────────────────────────────────────
 # Add one entry per electrical component you want to detect.
 # The pipeline will assign sequential class IDs (0, 1, 2, …) in list order.
