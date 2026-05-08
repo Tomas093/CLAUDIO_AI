@@ -140,6 +140,9 @@ global:
   val_ratio:   0.10    # 10% validación
   test_ratio:  0.10    # 10% test
 
+  # Restricciones de Generación
+  require_full_visibility: true  # Si es true, el componente no puede ser cortado por los bordes
+
   # Hardware (para GPUs de 8GB VRAM)
   batch_size: 16       # Tamaño de batch (NO usa auto-batch)
   workers: 4           # Workers del dataloader

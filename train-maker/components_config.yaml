@@ -35,6 +35,7 @@ global:
   components_per_img_min: 1
   components_per_img_max: 5
   allow_random_rotation: true
+  require_full_visibility: true  # false = permite que los componentes se corten en los bordes
 
   # YOLO training
   yolo_model: "yolov8n.pt"

@@ -75,6 +75,7 @@ def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
             modifier_allow_rotation=cfg.modifiers.allow_rotation,
             modifier_thickness_min=cfg.modifiers.thickness_dilation[0],
             modifier_thickness_max=cfg.modifiers.thickness_dilation[1],
+            require_full_visibility=cfg.g.require_full_visibility,
         )
         print(f"    ⏱  {time.time() - t0:.1f}s\n")
 

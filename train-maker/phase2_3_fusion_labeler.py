@@ -182,14 +182,28 @@ def composite_sprite_on_bg(bg: np.ndarray, sprite: np.ndarray, x: int, y: int) -
 
 def calculate_yolo_bbox(
         x: int, y: int, sprite_w: int, sprite_h: int, bg_w: int, bg_h: int, class_id: int = CLASS_ID
-) -> YoloBBox:
-    cx_px = x + sprite_w / 2.0
-    cy_px = y + sprite_h / 2.0
-
-    cx = np.clip(cx_px / bg_w, 0.0, 1.0)
-    cy = np.clip(cy_px / bg_h, 0.0, 1.0)
-    w = np.clip(sprite_w / bg_w, 0.0, 1.0)
-    h = np.clip(sprite_h / bg_h, 0.0, 1.0)
+) -> YoloBBox | None:
+    # 1. Calculate visible bounds in pixel coordinates
+    x1 = max(0, x)
+    y1 = max(0, y)
+    x2 = min(bg_w, x + sprite_w)
+    y2 = min(bg_h, y + sprite_h)
+    
+    vis_w = x2 - x1
+    vis_h = y2 - y1
+    
+    # If completely outside or degenerate
+    if vis_w <= 0 or vis_h <= 0:
+        return None
+        
+    # 2. Calculate YOLO coordinates for the VISIBLE part (normalized 0-1)
+    cx_px = x1 + vis_w / 2.0
+    cy_px = y1 + vis_h / 2.0
+    
+    cx = cx_px / bg_w
+    cy = cy_px / bg_h
+    w = vis_w / bg_w
+    h = vis_h / bg_h
 
     return YoloBBox(class_id=class_id, cx=cx, cy=cy, w=w, h=h)
 
@@ -212,6 +226,7 @@ def generate_one_sample(
         modifier_allow_rotation: bool = True,
         modifier_thickness_min: int = 1,
         modifier_thickness_max: int = 3,
+        require_full_visibility: bool = True,
 ) -> None:
     bg = cv2.imread(str(random.choice(bg_paths)))
     if bg is None: return
@@ -276,12 +291,17 @@ def generate_one_sample(
         canvas, base_roi = scale_canvas_and_roi(canvas, base_roi, scale)
 
         c_h, c_w = canvas.shape[:2]
-        if c_w >= w_bg or c_h >= h_bg:
+        if require_full_visibility and (c_w > w_bg or c_h > h_bg):
             continue
 
         # 6. Posicionar el lienzo ensamblado en el fondo
-        px = random.randint(0, max(0, w_bg - c_w))
-        py = random.randint(0, max(0, h_bg - c_h))
+        if require_full_visibility:
+            px = random.randint(0, max(0, w_bg - c_w))
+            py = random.randint(0, max(0, h_bg - c_h))
+        else:
+            # Allow up to 50% of the component to be outside
+            px = random.randint(-c_w // 2, max(0, w_bg - c_w // 2))
+            py = random.randint(-c_h // 2, max(0, h_bg - c_h // 2))
 
         bg = composite_sprite_on_bg(bg, canvas, px, py)
 
@@ -291,7 +311,8 @@ def generate_one_sample(
         final_y = py + by
 
         bbox = calculate_yolo_bbox(final_x, final_y, bw, bh, w_bg, h_bg, class_id=class_id)
-        bboxes.append(bbox)
+        if bbox is not None:
+            bboxes.append(bbox)
 
         # 8. Agregar texto basura cerca del componente (Ruido visual para la IA)
         if random.random() > 0.5:
@@ -330,6 +351,7 @@ def generate_synthetic_dataset(
         modifier_allow_rotation: bool = True,
         modifier_thickness_min: int = 1,
         modifier_thickness_max: int = 3,
+        require_full_visibility: bool = True,
 ) -> tuple[list[Path], list[Path]]:
     """Generate synthetic images with YOLO labels.
 
@@ -395,6 +417,7 @@ def generate_synthetic_dataset(
             modifier_allow_rotation=modifier_allow_rotation,
             modifier_thickness_min=modifier_thickness_min,
             modifier_thickness_max=modifier_thickness_max,
+            require_full_visibility=require_full_visibility,
         )
         img_paths.append(i_path)
         lbl_paths.append(l_path)

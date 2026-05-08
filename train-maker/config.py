@@ -99,6 +99,7 @@ class GlobalConfig:
     components_per_img_min: int = 1
     components_per_img_max: int = 5
     allow_random_rotation: bool = True
+    require_full_visibility: bool = True
 
     # YOLO training
     yolo_model: str = "yolov8m.pt"
@@ -195,6 +196,7 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
         components_per_img_min=int(g_raw.get("components_per_img_min", 1)),
         components_per_img_max=int(g_raw.get("components_per_img_max", 5)),
         allow_random_rotation=bool(g_raw.get("allow_random_rotation", True)),
+        require_full_visibility=bool(g_raw.get("require_full_visibility", True)),
         yolo_model=str(g_raw.get("yolo_model", "yolov8m.pt")),
         epochs=int(g_raw.get("epochs", 100)),
         imgsz=int(g_raw.get("imgsz", 640)),
@@ -346,6 +348,7 @@ SPRITE_SCALE_MAX = _cfg.g.sprite_scale_max
 COMPONENTS_PER_IMG_MIN = _cfg.g.components_per_img_min
 COMPONENTS_PER_IMG_MAX = _cfg.g.components_per_img_max
 ALLOW_RANDOM_ROTATION = _cfg.g.allow_random_rotation
+REQUIRE_FULL_VISIBILITY = _cfg.g.require_full_visibility
 
 # Phase 4
 TRAIN_RATIO = _cfg.g.train_ratio
