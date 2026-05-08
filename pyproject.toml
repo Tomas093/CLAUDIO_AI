@@ -1,0 +1,21 @@
+[pyrefly]
+python_version = "3.14"
+python_platform = "Linux"
+search_path = ["."]
+
+# These are binary/C-extension packages that Pyrefly can't introspect.
+# They are installed and work at runtime; suppress false-positive errors.
+[pyrefly.ignore]
+missing_imports = [
+    "cv2",
+    "numpy",
+    "PIL",
+    "ezdxf",
+    "ezdxf.addons",
+    "ezdxf.addons.drawing",
+    "ezdxf.addons.drawing.matplotlib",
+    "matplotlib",
+    "matplotlib.pyplot",
+    "torch",
+    "ultralytics",
+]

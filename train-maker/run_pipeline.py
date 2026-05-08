@@ -161,7 +161,10 @@ def run_pipeline(auto_train: bool = True) -> None:
     print(f"{'─' * 60}\n")
 
     t0 = time.time()
-    val_stats = validate_dataset(cfg.g.dataset_dir)
+    val_stats = validate_dataset(
+        cfg.g.dataset_dir,
+        max_missing_labels_pct=cfg.g.max_missing_labels_pct,
+    )
     print(f"  ⏱  {time.time() - t0:.1f}s\n")
 
     if val_stats["images_deleted"] > 0:

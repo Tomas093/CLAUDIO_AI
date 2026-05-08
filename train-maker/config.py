@@ -90,6 +90,9 @@ class GlobalConfig:
     patience: int = 20
     project: str = "Liard_Detection"
 
+    # Validation safety
+    max_missing_labels_pct: float = 5.0
+
 
 @dataclass
 class ComponentConfig:
@@ -166,6 +169,9 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
         imgsz=int(g_raw.get("imgsz", 640)),
         patience=int(g_raw.get("patience", 20)),
         project=str(g_raw.get("project", "Liard_Detection")),
+        max_missing_labels_pct=float(
+            raw.get("validation", {}).get("max_missing_labels_pct", 5.0)
+        ),
     )
 
     # Validate ratios
