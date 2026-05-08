@@ -61,7 +61,8 @@ def run_pipeline() -> None:
     print(f"  📄 Config YOLO:  {yaml_path.resolve()}")
     print()
     print("  🚀 Para entrenar:")
-    print(f"     yolo train data={yaml_path} model=yolov8n.pt epochs=100 imgsz=640")
+    # Recomendar uso del modelo 'medium' en lugar de 'nano'
+    print(f"     yolo train data={yaml_path} model=yolov8m.pt epochs=100 imgsz=640")
     print("═" * 60 + "\n")
 
 
