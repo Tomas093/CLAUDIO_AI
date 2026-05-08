@@ -256,26 +256,48 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
     )
 
     # ── Components list ───────────────────────────────────────────────────
+    def _normalize_dxf_paths(raw_value, component_name: str) -> list[Path]:
+        """Accept `dxf_path`/`dxf_paths` as string, Path, or list and return Paths."""
+
+        if raw_value is None:
+            raise ValueError(
+                f"Component '{component_name}' must define 'dxf_path' or 'dxf_paths'."
+            )
+
+        if isinstance(raw_value, (str, Path)):
+            raw_items = [raw_value]
+        elif isinstance(raw_value, (list, tuple)):
+            raw_items = list(raw_value)
+        else:
+            raise TypeError(
+                f"Component '{component_name}' has invalid DXF path type: {type(raw_value).__name__}."
+            )
+
+        normalized: list[Path] = []
+        for item in raw_items:
+            if isinstance(item, (str, Path)):
+                normalized.append(BASE_DIR / item)
+            elif isinstance(item, (list, tuple)) and len(item) == 1 and isinstance(item[0], (str, Path)):
+                # YAML mistakes like `dxf_path: [["foo.dxf"]]` are flattened once.
+                normalized.append(BASE_DIR / item[0])
+            else:
+                raise TypeError(
+                    f"Component '{component_name}' has invalid DXF path entry: {item!r}"
+                )
+
+        return normalized
+
     components: list[ComponentConfig] = []
     for idx, c_raw in enumerate(raw.get("components", [])):
         lt = c_raw.get("line_thickness_range", [2, 150])
 
-        # Support both single 'dxf_path' (string) and multi 'dxf_paths' (list)
-        raw_paths = c_raw.get("dxf_paths", None)
-        if raw_paths is None:
-            # Fallback: single dxf_path
-            single = c_raw.get("dxf_path", None)
-            if single is None:
-                raise ValueError(
-                    f"Component '{c_raw.get('name', '?')}' must have "
-                    "'dxf_path' or 'dxf_paths' defined."
-                )
-            raw_paths = [single]
-
-        dxf_paths = [BASE_DIR / p for p in raw_paths]
+        # Support both `dxf_path` (single string or legacy list) and `dxf_paths`.
+        component_name = c_raw.get("name", "?")
+        raw_paths = c_raw.get("dxf_paths", c_raw.get("dxf_path", None))
+        dxf_paths = _normalize_dxf_paths(raw_paths, component_name)
 
         comp = ComponentConfig(
-            name=c_raw["name"],
+            name=component_name,
             dxf_paths=dxf_paths,
             images_to_generate=int(c_raw.get("images_to_generate", 10_000)),
             sprite_variations=int(c_raw.get("sprite_variations", 150)),
