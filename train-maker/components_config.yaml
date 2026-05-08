@@ -9,7 +9,7 @@
 # ── Global Settings ───────────────────────────────────────────────────────────
 global:
   # I/O paths (relative to train-maker/)
-  backgrounds_dir: "input/backgrounds"
+  backgrounds_dir: "output/backgrounds"
   output_dir: "output"
   dataset_dir: "dataset"
 
@@ -49,7 +49,7 @@ global:
 # Set "enabled: false" or remove the section to skip (use existing backgrounds).
 backgrounds:
   enabled: true
-  dxf_sources_dir: "input/backgrounds"   # folder with full-plan .dxf files
+  dxf_sources_dir: "input/planos_completos"   # folder with full-plan .dxf files
   tile_size: 640                               # tile size in pixels
   overlap: 320                                 # overlap between tiles (pixels)
   render_dpi: 4098                             # high DPI for full plans
@@ -108,8 +108,7 @@ modifiers:
 components:
   - name: "interruptor_termomagnetico"
     dxf_path:
-      - "input/components/component.dxf"
-#      - "input/components/component_3.dxf"
+      - "input/component.dxf"
     images_to_generate: 2500
     sprite_variations: 99
     line_thickness_range: [2, 100]

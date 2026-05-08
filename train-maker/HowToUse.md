@@ -20,9 +20,9 @@ train-maker/
 ├── input/
 │   ├── component.dxf         ← Tu DXF del componente eléctrico
 │   ├── modifiers/            ← PNGs de polos (//, ///) y símbolos extra
-│   ├── backgrounds/          ← Fondos (auto-generados o manuales)
 │   └── planos_completos/     ← Planos DXF completos (para generar fondos)
 ├── output/                   ← Sprites y sintéticos (generados)
+│   └── backgrounds/          ← Fondos (auto-generados o manuales)
 ├── dataset/                  ← Dataset YOLO final (generado)
 │   ├── images/
 │   │   ├── train/
@@ -131,7 +131,7 @@ python3 run_pipeline.py --no-train
 ```yaml
 global:
   # Rutas (relativas a train-maker/)
-  backgrounds_dir: "input/backgrounds"
+  backgrounds_dir: "output/backgrounds"
   output_dir: "output"
   dataset_dir: "dataset"
 
@@ -164,7 +164,7 @@ backgrounds:
   min_std_dev: 10                            # Descarta tiles casi vacíos
 ```
 
-> **Tip:** Si ya tenés imágenes de fondo (JPG/PNG), ponelas directamente en `input/backgrounds/` y usá `enabled: false`.
+> **Tip:** Si ya tenés imágenes de fondo (JPG/PNG), ponelas directamente en `output/backgrounds/` y usá `enabled: false`.
 
 ### Augmentation (Anti-Overfitting)
 
@@ -282,7 +282,7 @@ python3 generate_backgrounds.py
 ## 🐛 Solución de Problemas
 
 ### "La carpeta de fondos está vacía"
-- Opción A: Poné imágenes JPG/PNG manualmente en `input/backgrounds/`
+- Opción A: Poné imágenes JPG/PNG manualmente en `output/backgrounds/`
 - Opción B: Poné archivos `.dxf` de planos completos en `input/planos_completos/` y configurá `backgrounds.enabled: true`
 
 ### "Split ratios must sum to 1.0"

@@ -179,7 +179,7 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
     # ── Global block ──────────────────────────────────────────────────────
     g_raw = raw.get("global", {})
     g = GlobalConfig(
-        backgrounds_dir=BASE_DIR / g_raw.get("backgrounds_dir", "input/backgrounds"),
+        backgrounds_dir=BASE_DIR / g_raw.get("backgrounds_dir", "output/backgrounds"),
         output_dir=BASE_DIR / g_raw.get("output_dir", "output"),
         dataset_dir=BASE_DIR / g_raw.get("dataset_dir", "dataset"),
         train_ratio=float(g_raw.get("train_ratio", 0.80)),
