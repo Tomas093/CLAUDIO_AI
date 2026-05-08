@@ -217,25 +217,37 @@ modifiers:
 
 ## 🔧 Agregar un Nuevo Componente
 
-1. Obtené el DXF del componente (ej: `contactor.dxf`)
-2. Agregalo a `components_config.yaml`:
+### Componente con un solo símbolo DXF
 
 ```yaml
 components:
-  - name: "interruptor_termomagnetico"
-    dxf_path: "input/component.dxf"
-    images_to_generate: 10000
-    sprite_variations: 150
-    line_thickness_range: [2, 150]
-    polarity_filters: []
-
-  - name: "contactor"                    # ← NUEVO
-    dxf_path: "input/contactor.dxf"      # ← Ruta al DXF
+  - name: "contactor"
+    dxf_path: "input/contactor.dxf"      # un solo archivo DXF
     images_to_generate: 10000
     sprite_variations: 150
     line_thickness_range: [2, 150]
     polarity_filters: []
 ```
+
+### Componente con múltiples símbolos (IEC + ANSI, etc.)
+
+Si un mismo componente tiene distintas representaciones visuales (ej: norma IEC vs ANSI), usá `dxf_paths` (lista). El pipeline genera **N imágenes POR CADA DXF**, todas con el mismo class_id:
+
+```yaml
+  - name: "rele_termico"
+    dxf_paths:                            # ← LISTA de DXFs
+      - "input/rele_termico_iec.dxf"      # variante IEC
+      - "input/rele_termico_ansi.dxf"     # variante ANSI
+    images_to_generate: 10000             # 10k POR variante (20k total)
+    sprite_variations: 120
+    line_thickness_range: [2, 120]
+    polarity_filters: []
+```
+
+> **Cómo funciona:** Si tenés 2 DXFs con `images_to_generate: 10000`, el pipeline genera:
+> - 10.000 imágenes del símbolo IEC → `output/rele_termico/synthetic_v0/`
+> - 10.000 imágenes del símbolo ANSI → `output/rele_termico/synthetic_v1/`
+> - Total: 20.000 imágenes, todas con `class_id: 1` (rele_termico)
 
 Los class IDs se asignan automáticamente en orden de lista (0, 1, 2…). El `data.yaml` generado tendrá:
 
@@ -243,8 +255,9 @@ Los class IDs se asignan automáticamente en orden de lista (0, 1, 2…). El `da
 nc: 2
 names:
   0: interruptor_termomagnetico
-  1: contactor
+  1: rele_termico
 ```
+
 
 ---
 

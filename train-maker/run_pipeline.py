@@ -25,49 +25,58 @@ from validate_dataset import validate_dataset
 
 
 def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
-    """Run Phase 1 + Phase 2/3 for a single component."""
+    """Run Phase 1 + Phase 2/3 for a single component.
 
-    sprites_dir = cfg.component_sprites_dir(comp)
-    synthetic_dir = cfg.component_synthetic_dir(comp)
+    If the component has multiple DXF variants (e.g. IEC + ANSI symbols),
+    each variant is processed independently — generating *images_to_generate*
+    images per variant, all with the same *class_id*.
+    """
 
-    # ── Phase 1: Sprite extraction ────────────────────────────────────────
-    print(f"  ▶ FASE 1 — Sprites de '{comp.name}'")
-    t0 = time.time()
-    generate_sprite_variations(
-        dxf_path=comp.dxf_path,
-        output_dir=sprites_dir,
-        n_variations=comp.sprite_variations,
-        kernel_min=comp.line_thickness_range[0],
-        kernel_max=comp.line_thickness_range[1],
-        dpi=cfg.g.render_dpi,
-        component_name=comp.name,
-    )
-    print(f"    ⏱  {time.time() - t0:.1f}s\n")
+    n_variants = cfg.component_variant_count(comp)
 
-    # ── Phase 2/3: Synthetic image generation ─────────────────────────────
-    print(f"  ▶ FASES 2/3 — Generación sintética de '{comp.name}'")
-    t0 = time.time()
-    generate_synthetic_dataset(
-        sprites_dir=sprites_dir,
-        bg_dir=cfg.g.backgrounds_dir,
-        output_dir=synthetic_dir,
-        n_total=comp.images_to_generate,
-        component_name=comp.name,
-        class_id=comp.class_id,
-        sprite_scale_min=cfg.g.sprite_scale_min,
-        sprite_scale_max=cfg.g.sprite_scale_max,
-        components_min=cfg.g.components_per_img_min,
-        components_max=cfg.g.components_per_img_max,
-        allow_rotation=cfg.g.allow_random_rotation,
-        modifiers_dir=cfg.modifiers.dir,
-        modifier_probability=cfg.modifiers.probability,
-        modifier_count_min=cfg.modifiers.count_min,
-        modifier_count_max=cfg.modifiers.count_max,
-        modifier_allow_rotation=cfg.modifiers.allow_rotation,
-        modifier_thickness_min=cfg.modifiers.thickness_dilation[0],
-        modifier_thickness_max=cfg.modifiers.thickness_dilation[1],
-    )
-    print(f"    ⏱  {time.time() - t0:.1f}s\n")
+    for vi, dxf_path in enumerate(comp.dxf_paths):
+        variant_label = f" (variante {vi + 1}/{n_variants}: {dxf_path.stem})" if n_variants > 1 else ""
+        sprites_dir = cfg.component_sprites_dir(comp, vi)
+        synthetic_dir = cfg.component_synthetic_dir(comp, vi)
+
+        # ── Phase 1: Sprite extraction ────────────────────────────────────
+        print(f"  ▶ FASE 1 — Sprites de '{comp.name}'{variant_label}")
+        t0 = time.time()
+        generate_sprite_variations(
+            dxf_path=dxf_path,
+            output_dir=sprites_dir,
+            n_variations=comp.sprite_variations,
+            kernel_min=comp.line_thickness_range[0],
+            kernel_max=comp.line_thickness_range[1],
+            dpi=cfg.g.render_dpi,
+            component_name=comp.name,
+        )
+        print(f"    ⏱  {time.time() - t0:.1f}s\n")
+
+        # ── Phase 2/3: Synthetic image generation ─────────────────────────
+        print(f"  ▶ FASES 2/3 — Generación sintética de '{comp.name}'{variant_label}")
+        t0 = time.time()
+        generate_synthetic_dataset(
+            sprites_dir=sprites_dir,
+            bg_dir=cfg.g.backgrounds_dir,
+            output_dir=synthetic_dir,
+            n_total=comp.images_to_generate,
+            component_name=comp.name,
+            class_id=comp.class_id,
+            sprite_scale_min=cfg.g.sprite_scale_min,
+            sprite_scale_max=cfg.g.sprite_scale_max,
+            components_min=cfg.g.components_per_img_min,
+            components_max=cfg.g.components_per_img_max,
+            allow_rotation=cfg.g.allow_random_rotation,
+            modifiers_dir=cfg.modifiers.dir,
+            modifier_probability=cfg.modifiers.probability,
+            modifier_count_min=cfg.modifiers.count_min,
+            modifier_count_max=cfg.modifiers.count_max,
+            modifier_allow_rotation=cfg.modifiers.allow_rotation,
+            modifier_thickness_min=cfg.modifiers.thickness_dilation[0],
+            modifier_thickness_max=cfg.modifiers.thickness_dilation[1],
+        )
+        print(f"    ⏱  {time.time() - t0:.1f}s\n")
 
 
 def run_pipeline(auto_train: bool = True) -> None:
@@ -87,7 +96,10 @@ def run_pipeline(auto_train: bool = True) -> None:
     print("═" * 60)
     print(f"  Componentes: {len(cfg.components)}")
     for c in cfg.components:
-        print(f"    [{c.class_id}] {c.name}  →  {c.images_to_generate} imgs")
+        n_v = len(c.dxf_paths)
+        total_imgs = c.images_to_generate * n_v
+        variant_info = f"  ({n_v} variantes × {c.images_to_generate} = {total_imgs})" if n_v > 1 else ""
+        print(f"    [{c.class_id}] {c.name}  →  {total_imgs} imgs{variant_info}")
     if cfg.backgrounds.enabled:
         print(f"  Backgrounds: auto-generados desde '{cfg.backgrounds.dxf_sources_dir}'")
     print()
@@ -96,11 +108,12 @@ def run_pipeline(auto_train: bool = True) -> None:
 
     # ── Validate component DXFs ───────────────────────────────────────────
     for comp in cfg.components:
-        if not comp.dxf_path.exists():
-            raise FileNotFoundError(
-                f"No se encontró el archivo DXF: {comp.dxf_path}\n"
-                f"Componente: {comp.name}"
-            )
+        for dxf_path in comp.dxf_paths:
+            if not dxf_path.exists():
+                raise FileNotFoundError(
+                    f"No se encontró el archivo DXF: {dxf_path}\n"
+                    f"Componente: {comp.name}"
+                )
 
     # ── Phase 0: Background generation from DXF floor plans ──────────────
     if cfg.backgrounds.enabled:

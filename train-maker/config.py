@@ -113,11 +113,16 @@ class GlobalConfig:
 
 @dataclass
 class ComponentConfig:
-    """Per-component settings parsed from each item in ``components:``."""
+    """Per-component settings parsed from each item in ``components:``.
+
+    A single component may have multiple DXF source files (variants) —
+    e.g. IEC vs ANSI symbol.  The pipeline generates *images_to_generate*
+    synthetic images **per variant**, all sharing the same *class_id*.
+    """
 
     name: str
-    dxf_path: Path
-    images_to_generate: int = 10_000
+    dxf_paths: list[Path]              # one or more DXF source files
+    images_to_generate: int = 10_000   # per variant (NOT total)
     sprite_variations: int = 150
     line_thickness_range: list[int] = field(default_factory=lambda: [2, 150])
     polarity_filters: list[str] = field(default_factory=list)
@@ -134,15 +139,23 @@ class PipelineConfig:
     modifiers: ModifiersConfig
     components: list[ComponentConfig]
 
-    # ── Convenience helpers ────────────────────────────────────────────────
+    # ── Convenience helpers ────────────────────────────────────────────
 
-    def component_sprites_dir(self, comp: ComponentConfig) -> Path:
-        """Return the directory where sprites for *comp* are stored."""
-        return self.g.output_dir / comp.name / "sprites"
+    def component_sprites_dir(self, comp: ComponentConfig, variant_idx: int = 0) -> Path:
+        """Return the sprites directory for *comp*'s variant *variant_idx*."""
+        if len(comp.dxf_paths) == 1:
+            return self.g.output_dir / comp.name / "sprites"
+        return self.g.output_dir / comp.name / f"sprites_v{variant_idx}"
 
-    def component_synthetic_dir(self, comp: ComponentConfig) -> Path:
-        """Return the directory where synthetic images for *comp* are stored."""
-        return self.g.output_dir / comp.name / "synthetic"
+    def component_synthetic_dir(self, comp: ComponentConfig, variant_idx: int = 0) -> Path:
+        """Return the synthetic-output directory for *comp*'s variant."""
+        if len(comp.dxf_paths) == 1:
+            return self.g.output_dir / comp.name / "synthetic"
+        return self.g.output_dir / comp.name / f"synthetic_v{variant_idx}"
+
+    def component_variant_count(self, comp: ComponentConfig) -> int:
+        """Number of DXF variants for this component."""
+        return len(comp.dxf_paths)
 
     def class_names(self) -> dict[int, str]:
         """Return ``{class_id: name}`` mapping for all components."""
@@ -246,9 +259,24 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
     components: list[ComponentConfig] = []
     for idx, c_raw in enumerate(raw.get("components", [])):
         lt = c_raw.get("line_thickness_range", [2, 150])
+
+        # Support both single 'dxf_path' (string) and multi 'dxf_paths' (list)
+        raw_paths = c_raw.get("dxf_paths", None)
+        if raw_paths is None:
+            # Fallback: single dxf_path
+            single = c_raw.get("dxf_path", None)
+            if single is None:
+                raise ValueError(
+                    f"Component '{c_raw.get('name', '?')}' must have "
+                    "'dxf_path' or 'dxf_paths' defined."
+                )
+            raw_paths = [single]
+
+        dxf_paths = [BASE_DIR / p for p in raw_paths]
+
         comp = ComponentConfig(
             name=c_raw["name"],
-            dxf_path=BASE_DIR / c_raw["dxf_path"],
+            dxf_paths=dxf_paths,
             images_to_generate=int(c_raw.get("images_to_generate", 10_000)),
             sprite_variations=int(c_raw.get("sprite_variations", 150)),
             line_thickness_range=[int(lt[0]), int(lt[1])],
@@ -275,7 +303,7 @@ _cfg = load_config()
 
 # Paths
 INPUT_DIR = BASE_DIR / "input"
-DXF_FILE = _cfg.components[0].dxf_path if _cfg.components else INPUT_DIR / "component.dxf"
+DXF_FILE = _cfg.components[0].dxf_paths[0] if _cfg.components else INPUT_DIR / "component.dxf"
 BACKGROUNDS_DIR = _cfg.g.backgrounds_dir
 OUTPUT_DIR = _cfg.g.output_dir
 SPRITES_DIR = _cfg.component_sprites_dir(_cfg.components[0]) if _cfg.components else OUTPUT_DIR / "sprites"

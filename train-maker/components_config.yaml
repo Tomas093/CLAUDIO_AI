@@ -98,26 +98,38 @@ modifiers:
 
 # ── Component Definitions ─────────────────────────────────────────────────────
 # Add one entry per electrical component you want to detect.
-# The pipeline will assign sequential class IDs (0, 1, 2, …) in list order.
+# The pipeline assigns sequential class IDs (0, 1, 2, …) in list order.
+#
+# MULTI-SYMBOL SUPPORT:
+#   Use 'dxf_paths' (list) when the same component has multiple visual symbols
+#   (e.g., IEC vs ANSI standard). The pipeline generates images_to_generate
+#   images PER SYMBOL, all sharing the same class_id.
+#   You can also use 'dxf_path' (string) for single-symbol components.
 components:
   - name: "interruptor_termomagnetico"
-    dxf_path: "input/component.dxf"           # relative to train-maker/
-    images_to_generate: 10000
+    dxf_path: "input/component.dxf"           # single DXF (backward compatible)
+    images_to_generate: 10000                  # 10k images from this DXF
     sprite_variations: 150
     line_thickness_range: [2, 150]
-    polarity_filters: []                        # e.g., ["invert", "threshold"]
+    polarity_filters: []
 
-  # ── Example: uncomment and duplicate for more components ─────────────────
+  # ── Example: single DXF per component ────────────────────────────────────
   # - name: "contactor"
-  #   dxf_path: "dxf/contactor.dxf"
+  #   dxf_path: "input/contactor.dxf"
   #   images_to_generate: 10000
   #   sprite_variations: 150
   #   line_thickness_range: [2, 150]
   #   polarity_filters: ["invert"]
-  #
+
+  # ── Example: MULTIPLE DXFs → same class_id ───────────────────────────────
+  # Both IEC and ANSI symbols produce 10k images each (20k total),
+  # all labeled as class "rele_termico":
   # - name: "rele_termico"
-  #   dxf_path: "dxf/rele_termico.dxf"
-  #   images_to_generate: 8000
+  #   dxf_paths:                                # ← LIST of DXF files
+  #     - "input/rele_termico_iec.dxf"
+  #     - "input/rele_termico_ansi.dxf"
+  #   images_to_generate: 10000                 # 10k PER DXF (20k total)
   #   sprite_variations: 120
   #   line_thickness_range: [2, 120]
   #   polarity_filters: []
+

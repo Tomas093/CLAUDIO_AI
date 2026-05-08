@@ -36,17 +36,22 @@ def create_yolo_structure(dataset_dir: Path) -> dict[str, Path]:
 
 
 def _collect_all_component_images(cfg: PipelineConfig) -> list[tuple[Path, Path]]:
-    """Walk every component's synthetic output and collect (img, lbl) pairs."""
+    """Walk every component's synthetic output and collect (img, lbl) pairs.
+
+    Supports multi-variant components: each variant has its own
+    ``synthetic_v{i}/`` directory, all sharing the same class_id.
+    """
     pairs: list[tuple[Path, Path]] = []
     for comp in cfg.components:
-        syn_dir = cfg.component_synthetic_dir(comp)
-        imgs_dir = syn_dir / "images"
-        lbls_dir = syn_dir / "labels"
-        if not imgs_dir.exists():
-            continue
-        for img_path in sorted(imgs_dir.glob("*.jpg")):
-            lbl_path = lbls_dir / (img_path.stem + ".txt")
-            pairs.append((img_path, lbl_path))
+        for vi in range(cfg.component_variant_count(comp)):
+            syn_dir = cfg.component_synthetic_dir(comp, vi)
+            imgs_dir = syn_dir / "images"
+            lbls_dir = syn_dir / "labels"
+            if not imgs_dir.exists():
+                continue
+            for img_path in sorted(imgs_dir.glob("*.jpg")):
+                lbl_path = lbls_dir / (img_path.stem + ".txt")
+                pairs.append((img_path, lbl_path))
     return pairs
 
 
