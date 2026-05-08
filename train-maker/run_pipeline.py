@@ -59,6 +59,13 @@ def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
         components_min=cfg.g.components_per_img_min,
         components_max=cfg.g.components_per_img_max,
         allow_rotation=cfg.g.allow_random_rotation,
+        modifiers_dir=cfg.modifiers.dir,
+        modifier_probability=cfg.modifiers.probability,
+        modifier_count_min=cfg.modifiers.count_min,
+        modifier_count_max=cfg.modifiers.count_max,
+        modifier_allow_rotation=cfg.modifiers.allow_rotation,
+        modifier_thickness_min=cfg.modifiers.thickness_dilation[0],
+        modifier_thickness_max=cfg.modifiers.thickness_dilation[1],
     )
     print(f"    ⏱  {time.time() - t0:.1f}s\n")
 

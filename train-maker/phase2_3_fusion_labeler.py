@@ -22,10 +22,8 @@ from config import (
     SPRITE_SCALE_MIN,
     SPRITES_DIR,
     SYNTHETIC_DIR,
+    load_config,
 )
-
-# Carpeta donde vas a poner los PNGs de los polos (//, ///, etc.)
-MODIFIERS_DIR = Path("dataset_generator/modifiers")
 
 
 @dataclass
@@ -208,6 +206,12 @@ def generate_one_sample(
         components_min: int = COMPONENTS_PER_IMG_MIN,
         components_max: int = COMPONENTS_PER_IMG_MAX,
         allow_rotation: bool = ALLOW_RANDOM_ROTATION,
+        modifier_probability: float = 0.70,
+        modifier_count_min: int = 1,
+        modifier_count_max: int = 1,
+        modifier_allow_rotation: bool = True,
+        modifier_thickness_min: int = 1,
+        modifier_thickness_max: int = 3,
 ) -> None:
     bg = cv2.imread(str(random.choice(bg_paths)))
     if bg is None: return
@@ -230,33 +234,44 @@ def generate_one_sample(
     bboxes: list[YoloBBox] = []
 
     for _ in range(n):
-        # 1. Seleccionar base y modificador (70% de las veces usamos un modificador si existe)
+        # 1. Seleccionar base
         base_raw = random.choice(sprites_base)
-        mod_raw = random.choice(sprites_modifiers) if sprites_modifiers and random.random() > 0.3 else None
 
-        # --- MAGIA DE GROSOR (DILATACIÓN ALEATORIA) ---
-        if mod_raw is not None:
-            # Elegimos un grosor extra al azar: 1 (nada), 2 (poco) o 3 (bastante)
-            grosor_extra = random.choice([1, 2, 3])
+        # 2. Seleccionar modifier(s) con probabilidad configurable
+        mod_raw = None
+        if sprites_modifiers and random.random() < modifier_probability:
+            # Cuántos modifiers componer (por ahora se usa 1 pero preparado
+            # para stacking futuro)
+            n_mods = random.randint(modifier_count_min, modifier_count_max)
+            mod_raw = random.choice(sprites_modifiers).copy()
+
+            # Rotación aleatoria del modifier
+            if modifier_allow_rotation:
+                mod_angle = random.choice([None, cv2.ROTATE_90_CLOCKWISE,
+                                           cv2.ROTATE_180,
+                                           cv2.ROTATE_90_COUNTERCLOCKWISE])
+                if mod_angle is not None:
+                    mod_raw = cv2.rotate(mod_raw, mod_angle)
+
+            # Dilatación aleatoria del modifier (grosor de línea)
+            grosor_extra = random.randint(modifier_thickness_min,
+                                          modifier_thickness_max)
             if grosor_extra > 1:
-                # Hacemos una copia para no alterar el PNG original cargado en RAM
-                mod_raw = mod_raw.copy()
-                # Creamos el "pincel" (kernel) matemático que va a engordar los píxeles
-                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (grosor_extra, grosor_extra))
-                # Engordamos SÓLO el canal Alpha (la transparencia) para mantener el color original
+                kernel = cv2.getStructuringElement(
+                    cv2.MORPH_ELLIPSE, (grosor_extra, grosor_extra)
+                )
                 mod_raw[:, :, 3] = cv2.dilate(mod_raw[:, :, 3], kernel)
-        # ----------------------------------------------
 
-        # 2. Ensamblar lienzo modular
+        # 3. Ensamblar lienzo modular
         canvas, base_roi = build_modular_sprite(base_raw, mod_raw)
 
-        # 3. ROTACIÓN
+        # 4. ROTACIÓN del sprite completo
         if allow_rotation:
             angle = random.choice([0, 90, 180, 270])
             if angle != 0:
                 canvas, base_roi = rotate_sprite_and_track_bbox(canvas, angle, base_roi)
 
-        # 4. ESCALADO
+        # 5. ESCALADO
         scale = random.uniform(sprite_scale_min, sprite_scale_max)
         canvas, base_roi = scale_canvas_and_roi(canvas, base_roi, scale)
 
@@ -264,13 +279,13 @@ def generate_one_sample(
         if c_w >= w_bg or c_h >= h_bg:
             continue
 
-        # 5. Posicionar el lienzo ensamblado en el fondo
+        # 6. Posicionar el lienzo ensamblado en el fondo
         px = random.randint(0, max(0, w_bg - c_w))
         py = random.randint(0, max(0, h_bg - c_h))
 
         bg = composite_sprite_on_bg(bg, canvas, px, py)
 
-        # 6. Extraer coordenadas FINALES (solo de la base, ignorando el modificador)
+        # 7. Extraer coordenadas FINALES (solo de la base, ignorando el modificador)
         bx, by, bw, bh = base_roi
         final_x = px + bx
         final_y = py + by
@@ -278,14 +293,13 @@ def generate_one_sample(
         bbox = calculate_yolo_bbox(final_x, final_y, bw, bh, w_bg, h_bg, class_id=class_id)
         bboxes.append(bbox)
 
-        # 7. Agregar texto basura cerca del componente (Ruido visual para la IA)
+        # 8. Agregar texto basura cerca del componente (Ruido visual para la IA)
         if random.random() > 0.5:
             textos_cad = ["2x16A", "4x63A", "2x10A", "TUG", "RESERVA", "PDT.NOR", "TS3B-T1"]
             texto = random.choice(textos_cad)
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = random.uniform(0.4, 0.6)
             thickness = random.randint(1, 2)
-            # Dibuja el texto abajo del componente
             cv2.putText(bg, texto, (px, py + c_h + 20), font, font_scale, (0, 0, 0), thickness)
 
     out_img_path.parent.mkdir(parents=True, exist_ok=True)
@@ -309,6 +323,13 @@ def generate_synthetic_dataset(
         components_min: int = COMPONENTS_PER_IMG_MIN,
         components_max: int = COMPONENTS_PER_IMG_MAX,
         allow_rotation: bool = ALLOW_RANDOM_ROTATION,
+        modifiers_dir: Path | None = None,
+        modifier_probability: float = 0.70,
+        modifier_count_min: int = 1,
+        modifier_count_max: int = 1,
+        modifier_allow_rotation: bool = True,
+        modifier_thickness_min: int = 1,
+        modifier_thickness_max: int = 3,
 ) -> tuple[list[Path], list[Path]]:
     """Generate synthetic images with YOLO labels.
 
@@ -321,6 +342,10 @@ def generate_synthetic_dataset(
 
     **Naming**: ``{component_name}_img0001.jpg`` / ``.txt`` when
     *component_name* is provided.
+
+    **Modifiers**: PNG images from *modifiers_dir* are composited on top
+    of the base sprite with configurable probability, count, rotation,
+    and thickness dilation.
     """
 
     # ── Idempotency: clean slate ──────────────────────────────────────────
@@ -328,13 +353,21 @@ def generate_synthetic_dataset(
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resolve modifiers dir from config if not provided
+    if modifiers_dir is None:
+        cfg = load_config()
+        modifiers_dir = cfg.modifiers.dir
+
     # Cargamos tanto las bases como los modificadores
     sprites_base = load_rgba_images(sprites_dir)
-    sprites_modifiers = load_rgba_images(MODIFIERS_DIR)
+    sprites_modifiers = load_rgba_images(modifiers_dir)
 
     bg_paths = load_background_paths(bg_dir)
     print(
-        f"[Fase 2/3] {len(sprites_base)} bases | {len(sprites_modifiers)} modificadores | {len(bg_paths)} fondos | {n_total} muestras")
+        f"[Fase 2/3] {len(sprites_base)} bases | "
+        f"{len(sprites_modifiers)} modificadores (prob={modifier_probability:.0%}) | "
+        f"{len(bg_paths)} fondos | {n_total} muestras"
+    )
 
     prefix = f"{component_name}_" if component_name else ""
 
@@ -356,6 +389,12 @@ def generate_synthetic_dataset(
             components_min=components_min,
             components_max=components_max,
             allow_rotation=allow_rotation,
+            modifier_probability=modifier_probability,
+            modifier_count_min=modifier_count_min,
+            modifier_count_max=modifier_count_max,
+            modifier_allow_rotation=modifier_allow_rotation,
+            modifier_thickness_min=modifier_thickness_min,
+            modifier_thickness_max=modifier_thickness_max,
         )
         img_paths.append(i_path)
         lbl_paths.append(l_path)

@@ -52,6 +52,23 @@ class AugmentationConfig:
 
 
 @dataclass
+class ModifiersConfig:
+    """Settings for modifier sprites (pole symbols, annotations, etc.).
+
+    Modifiers are PNG images composited on top of the base sprite
+    before pasting onto the background.  Each parameter controls
+    a different axis of randomness.
+    """
+
+    dir: Path = Path("input/modifiers")
+    probability: float = 0.70        # prob. of attaching ANY modifier
+    count_min: int = 1               # min modifiers when used
+    count_max: int = 1               # max modifiers when used
+    allow_rotation: bool = True      # randomly rotate modifier 0/90/180/270
+    thickness_dilation: list[int] = field(default_factory=lambda: [1, 3])
+
+
+@dataclass
 class GlobalConfig:
     """Global pipeline settings parsed from the YAML ``global:`` block."""
 
@@ -114,6 +131,7 @@ class PipelineConfig:
     g: GlobalConfig
     backgrounds: BackgroundsConfig
     augmentation: AugmentationConfig
+    modifiers: ModifiersConfig
     components: list[ComponentConfig]
 
     # ── Convenience helpers ────────────────────────────────────────────────
@@ -212,6 +230,18 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
         erasing=float(aug_raw.get("erasing", 0.4)),
     )
 
+    # ── Modifiers block ───────────────────────────────────────────────────
+    mod_raw = raw.get("modifiers", {})
+    td = mod_raw.get("thickness_dilation", [1, 3])
+    modifiers = ModifiersConfig(
+        dir=BASE_DIR / mod_raw.get("dir", "input/modifiers"),
+        probability=float(mod_raw.get("probability", 0.70)),
+        count_min=int(mod_raw.get("count_min", 1)),
+        count_max=int(mod_raw.get("count_max", 1)),
+        allow_rotation=bool(mod_raw.get("allow_rotation", True)),
+        thickness_dilation=[int(td[0]), int(td[1])],
+    )
+
     # ── Components list ───────────────────────────────────────────────────
     components: list[ComponentConfig] = []
     for idx, c_raw in enumerate(raw.get("components", [])):
@@ -230,7 +260,10 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
     if not components:
         raise ValueError("At least one component must be defined in components_config.yaml")
 
-    return PipelineConfig(g=g, backgrounds=backgrounds, augmentation=augmentation, components=components)
+    return PipelineConfig(
+        g=g, backgrounds=backgrounds, augmentation=augmentation,
+        modifiers=modifiers, components=components,
+    )
 
 
 # ── Backward-compatible aliases (used by legacy imports) ──────────────────────

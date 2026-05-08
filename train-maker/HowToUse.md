@@ -19,6 +19,7 @@ train-maker/
 ├── run_pipeline.py           ← ⭐ CONTROLADOR MAESTRO (ejecuta todo)
 ├── input/
 │   ├── component.dxf         ← Tu DXF del componente eléctrico
+│   ├── modifiers/            ← PNGs de polos (//, ///) y símbolos extra
 │   ├── backgrounds/          ← Fondos (auto-generados o manuales)
 │   └── planos_completos/     ← Planos DXF completos (para generar fondos)
 ├── output/                   ← Sprites y sintéticos (generados)
@@ -47,6 +48,10 @@ cp mi_interruptor.dxf train-maker/input/component.dxf
 
 # 2. Poné tus planos completos (para generar fondos) en input/planos_completos/
 cp plano_tablero_*.dxf train-maker/input/planos_completos/
+
+# 3. (Opcional) Poné PNGs de polos y símbolos en input/modifiers/
+#    Estos se componen aleatoriamente sobre el sprite base
+cp polo_doble.png polo_triple.png train-maker/input/modifiers/
 ```
 
 ### Paso 2: Configurar `components_config.yaml`
@@ -93,8 +98,9 @@ python3 run_pipeline.py --no-train
                        ▼
 ┌─────────────────────────────────────────────────────┐
 │  Fases 2/3 — Fusión + Auto-Etiquetado              │
-│  Sprite + fondo aleatorio → rotación → escala       │
-│  → composición → genera .jpg + .txt (YOLO labels)   │
+│  Sprite base + modifier aleatorio (prob=70%) →      │
+│  rotación aleatoria del modifier → composición →    │
+│  escala + rotación → pegar en fondo → YOLO labels   │
 └──────────────────────┬──────────────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────────────┐
@@ -190,6 +196,22 @@ validation:
 ```
 
 > **Trampa de los empty labels:** Si un bug en la Fase 2/3 no genera el 50% de los `.txt`, la validación sin este umbral pasaría "en verde" (creando archivos vacíos), entrenando un modelo que cree que "acá no hay nada" en imágenes que SÍ tienen objetos.
+
+### Modifiers (Polos y Símbolos)
+
+```yaml
+modifiers:
+  dir: "input/modifiers"      # Carpeta con PNGs (fondo transparente)
+  probability: 0.70           # 70% de prob. de agregar modifier al sprite
+  count_min: 1                # Min modifiers por sprite (cuando se usa)
+  count_max: 1                # Max modifiers por sprite (cuando se usa)
+  allow_rotation: true        # Rota el modifier aleatoriamente 0/90/180/270°
+  thickness_dilation: [1, 3]  # Grosor aleatorio de línea del modifier
+```
+
+> **¿Qué son los modifiers?** Son imágenes PNG con fondo transparente (ej: los símbolos de polos `//`, `///` que aparecen en planos eléctricos reales). Se componen **encima** del sprite base antes de pegarlo al fondo.
+>
+> **¿Por qué aleatoriamente?** En planos reales no todos los componentes tienen polos, y los que tienen pueden estar rotados. La aleatorización simula esta variación natural y evita que el modelo se "memorice" un patrón fijo.
 
 ---
 
@@ -288,3 +310,4 @@ pip3 install opencv-python-headless ezdxf matplotlib Pillow numpy pyyaml ultraly
 | **Label Safety** | Aborta si >5% de labels faltan → detecta bugs silenciosos en generación |
 | **VRAM Control** | batch_size y workers fijos → no explota en GPUs de 8GB |
 | **Anti-Overfitting** | Augmentation controlada desde YAML → previene memorización de sprites |
+| **Modifiers Aleatorios** | Prob/rotación/grosor random → simula variación real de polos en planos |
