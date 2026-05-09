@@ -17,10 +17,15 @@ from ezdxf.addons.drawing.config import Configuration
 import matplotlib.pyplot as plt
 from PIL import Image
 
+# Deshabilitamos el check anti "decompression bomb" de PIL: las imagenes
+# son generadas por nosotros, no es contenido sospechoso. Sin esto, PIL
+# rechaza imagenes > ~179 MP.
+Image.MAX_IMAGE_PIXELS = None
+
 from scale_analyzer import calcular_factor_escala
 
-# Limite de pixeles por lado para no quedarte sin RAM (32k cabe en 16GB)
-MAX_DIM_PX = 16000
+# Limite de pixeles por lado por defecto (subible con argumento)
+MAX_DIM_PX_DEFAULT = 16000
 PAD_PX = 32  # padding negro/blanco para que simbolos en el borde no queden cortados
 
 
@@ -69,7 +74,7 @@ def _post_procesar_bw(image_path, modo):
 
 
 def renderizar_dxf(dxf_path, output_path, capas_incluir=None, target_px=64,
-                    modo_color="color"):
+                    modo_color="color", max_dim_px=MAX_DIM_PX_DEFAULT):
     """
     Renderiza dxf_path -> output_path.
     capas_incluir: si se pasa, solo esas capas se dibujan.
@@ -105,12 +110,15 @@ def renderizar_dxf(dxf_path, output_path, capas_incluir=None, target_px=64,
     alto_px = int(round(alto_cad * px_per_cad))
 
     # Cap por seguridad de memoria
-    if max(ancho_px, alto_px) > MAX_DIM_PX:
-        factor = MAX_DIM_PX / max(ancho_px, alto_px)
+    if max(ancho_px, alto_px) > max_dim_px:
+        factor = max_dim_px / max(ancho_px, alto_px)
         px_per_cad *= factor
         ancho_px = int(round(ancho_cad * px_per_cad))
         alto_px = int(round(alto_cad * px_per_cad))
-        print(f"[scale] limitado a {ancho_px}x{alto_px} (cap={MAX_DIM_PX})")
+        print(f"[scale] limitado a {ancho_px}x{alto_px} (cap={max_dim_px})")
+        print(f"[scale] aviso: los simbolos quedaron mas chicos que el target "
+              f"{target_px}px; YOLO puede perder precision. "
+              f"Considera --max-dim-px mas alto o --zoom < 1.")
 
     pad_cad = PAD_PX / px_per_cad
 

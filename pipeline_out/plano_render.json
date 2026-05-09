@@ -1,16 +1,16 @@
 {
-  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\CLAUDIO_AI\\dxf\\plano.dxf",
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\CLAUDIO_AI\\dxf\\plano5.dxf",
   "image_path": "C:\\Users\\juani\\faculty\\4Ano\\CLAUDIO_AI\\pipeline_out\\plano_render.png",
-  "px_per_cad": 53.955654259301085,
-  "x_min_cad": 3724.653208816482,
-  "y_min_cad": 1285.0350888941584,
-  "x_max_cad": 3742.6329568587216,
-  "y_max_cad": 1298.3179792178084,
-  "image_width_px": 970,
-  "image_height_px": 717,
+  "px_per_cad": 266.66666666741446,
+  "x_min_cad": 3333.5831119562354,
+  "y_min_cad": 1581.2759712384523,
+  "x_max_cad": 3398.1606760625627,
+  "y_max_cad": 1621.9792556787997,
+  "image_width_px": 17221,
+  "image_height_px": 10854,
   "scale_reference": {
     "tipo": "INSERT_diag",
-    "valor_cad": 1.1861592798491074
+    "valor_cad": 0.23999999999932697
   },
   "capas_incluir": null,
   "modo_color": "grayscale"
