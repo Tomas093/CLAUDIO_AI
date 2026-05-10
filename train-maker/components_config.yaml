@@ -22,15 +22,15 @@ global:
   negative_ratio: 0.15
 
   # Hardware constraints — prevents OOM on 8 GB VRAM GPUs
-  batch_size: 60
-  workers: 10
+  batch_size: 25
+  workers: 9
 
   # Rendering defaults
   render_dpi: 200
   binarize_threshold: 200
 
   # Synthetic image composition
-  sprite_scale_min: 0.01
+  sprite_scale_min: 0.5
   sprite_scale_max: 0.25
   components_per_img_min: 1
   components_per_img_max: 1
@@ -38,7 +38,7 @@ global:
   require_full_visibility: true  # false = permite que los componentes se corten en los bordes
 
   # YOLO training
-  yolo_model: "yolov8n.pt"
+  yolo_model: "yolov8s.pt"
   epochs: 300
   imgsz: 640
   patience: 20

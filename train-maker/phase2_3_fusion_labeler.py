@@ -208,6 +208,24 @@ def calculate_yolo_bbox(
     return YoloBBox(class_id=class_id, cx=cx, cy=cy, w=w, h=h)
 
 
+def _rects_overlap(
+        new_rect: tuple[int, int, int, int],
+        existing: list[tuple[int, int, int, int]],
+) -> bool:
+    """Return True if *new_rect* overlaps with ANY rectangle in *existing*.
+
+    Each rect is (x, y, w, h) in pixel coordinates.
+    Uses simple AABB intersection (no IoU threshold — any overlap counts).
+    """
+    nx, ny, nw, nh = new_rect
+    for ex, ey, ew, eh in existing:
+        # Two rectangles do NOT overlap iff one is entirely to the left,
+        # right, above, or below the other.
+        if nx < ex + ew and nx + nw > ex and ny < ey + eh and ny + nh > ey:
+            return True
+    return False
+
+
 def generate_one_sample(
         sprites_base: list[np.ndarray],
         sprites_modifiers: list[np.ndarray],
@@ -247,6 +265,8 @@ def generate_one_sample(
     h_bg, w_bg = bg.shape[:2]
     n = random.randint(components_min, components_max)
     bboxes: list[YoloBBox] = []
+    placed_rects: list[tuple[int, int, int, int]] = []  # (x, y, w, h) of placed canvases
+    max_placement_retries = 50
 
     for _ in range(n):
         # 1. Seleccionar base
@@ -294,23 +314,32 @@ def generate_one_sample(
         if require_full_visibility and (c_w > w_bg or c_h > h_bg):
             continue
 
-        # 6. Posicionar el lienzo ensamblado en el fondo
-        if require_full_visibility:
-            px = random.randint(0, max(0, w_bg - c_w))
-            py = random.randint(0, max(0, h_bg - c_h))
-        else:
-            # Allow up to 50% of the component to be outside
-            px = random.randint(-c_w // 2, max(0, w_bg - c_w // 2))
-            py = random.randint(-c_h // 2, max(0, h_bg - c_h // 2))
+        # 6. Posicionar el lienzo ensamblado en el fondo (con detección de colisiones)
+        placed = False
+        for _retry in range(max_placement_retries):
+            if require_full_visibility:
+                px = random.randint(0, max(0, w_bg - c_w))
+                py = random.randint(0, max(0, h_bg - c_h))
+            else:
+                # Allow up to 50% of the component to be outside
+                px = random.randint(-c_w // 2, max(0, w_bg - c_w // 2))
+                py = random.randint(-c_h // 2, max(0, h_bg - c_h // 2))
+
+            # Check collision with all previously placed rectangles
+            if not _rects_overlap((px, py, c_w, c_h), placed_rects):
+                placed = True
+                break
+
+        if not placed:
+            # Could not find a non-overlapping position after max retries; skip
+            continue
 
         bg = composite_sprite_on_bg(bg, canvas, px, py)
+        placed_rects.append((px, py, c_w, c_h))
 
-        # 7. Extraer coordenadas FINALES (solo de la base, ignorando el modificador)
-        bx, by, bw, bh = base_roi
-        final_x = px + bx
-        final_y = py + by
-
-        bbox = calculate_yolo_bbox(final_x, final_y, bw, bh, w_bg, h_bg, class_id=class_id)
+        # 7. Extraer coordenadas FINALES del canvas COMPLETO (base + modificador)
+        #    El bbox debe envolver todo el canvas compuesto, no solo la base.
+        bbox = calculate_yolo_bbox(px, py, c_w, c_h, w_bg, h_bg, class_id=class_id)
         if bbox is not None:
             bboxes.append(bbox)
 

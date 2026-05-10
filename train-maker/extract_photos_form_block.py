@@ -1,5 +1,6 @@
 import os
 import ezdxf
+import ezdxf.bbox
 import re
 from ezdxf.addons.drawing import RenderContext, Frontend
 from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
@@ -12,7 +13,7 @@ def extraer_fotos_de_bloques(dxf_path, output_folder, nombres_bloques_objetivo=N
 
     nombres_bloques_objetivo: Lista de strings con los nombres de los bloques a buscar.
                               Si es None, procesa todos los bloques del plano.
-    margen: Cuántas unidades CAD sumar alrededor del centro del bloque para el encuadre.
+    margen: Cuántas unidades CAD sumar alrededor del bounding box real del bloque.
     """
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -42,19 +43,33 @@ def extraer_fotos_de_bloques(dxf_path, output_folder, nombres_bloques_objetivo=N
 
         # Si le pasamos una lista de nombres, filtramos. Si no, agarramos todos.
         # Filtrar también los bloques cuyo nombre empieza con 'U' seguido de un número (p.ej. U10, U4)
-        if (nombres_bloques_objetivo and nombre_bloque not in nombres_bloques_objetivo) or nombre_bloque.startswith(r'^U\d'):
+        if nombres_bloques_objetivo and nombre_bloque not in nombres_bloques_objetivo:
+            continue
+        if re.match(r'^U\d', nombre_bloque):
             continue
 
-        # Obtener las coordenadas del punto de inserción (el "centro" del bloque)
-        punto_x = insercion.dxf.insert.x
-        punto_y = insercion.dxf.insert.y
+        # ── Calcular el bounding box REAL de la inserción ──────────────────
+        # ezdxf.bbox.extents devuelve un BoundingBox con las extensiones
+        # geométricas reales del bloque (incluyendo todas sus sub-entidades),
+        # en lugar de usar solo el punto de inserción que suele estar en un
+        # borde del símbolo.
+        bbox = ezdxf.bbox.extents([insercion])
 
-        # Definir la "ventana" de la foto (Bounding Box local)
-        # Centramos el bloque en la imagen restando y sumando el margen
-        x_min = punto_x - margen
-        x_max = punto_x + margen
-        y_min = punto_y - margen
-        y_max = punto_y + margen
+        if not bbox.has_data:
+            # Fallback: si no se pudo calcular la bbox, usar el punto de inserción
+            print(f"  ⚠ No se pudo calcular bbox para '{nombre_bloque}', usando punto de inserción.")
+            punto_x = insercion.dxf.insert.x
+            punto_y = insercion.dxf.insert.y
+            x_min = punto_x - margen
+            x_max = punto_x + margen
+            y_min = punto_y - margen
+            y_max = punto_y + margen
+        else:
+            # Usar las extensiones reales + margen
+            x_min = bbox.extmin.x - margen
+            x_max = bbox.extmax.x + margen
+            y_min = bbox.extmin.y - margen
+            y_max = bbox.extmax.y + margen
 
         # Configurar la foto
         fig = plt.figure(figsize=(4, 4))
@@ -70,6 +85,8 @@ def extraer_fotos_de_bloques(dxf_path, output_folder, nombres_bloques_objetivo=N
 
         # Nombre de archivo inteligente para Liard:
         # Guardamos el nombre real del bloque y sus coordenadas exactas.
+        punto_x = insercion.dxf.insert.x
+        punto_y = insercion.dxf.insert.y
         nombre_archivo = f"{nombre_bloque}_X{punto_x:.2f}_Y{punto_y:.2f}.png"
 
         # Limpiar caracteres raros del nombre del bloque (por si las dudas)
