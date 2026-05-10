@@ -22,24 +22,24 @@ global:
   negative_ratio: 0.15
 
   # Hardware constraints — prevents OOM on 8 GB VRAM GPUs
-  batch_size: 16
-  workers: 4
+  batch_size: 60
+  workers: 10
 
   # Rendering defaults
   render_dpi: 200
   binarize_threshold: 200
 
   # Synthetic image composition
-  sprite_scale_min: 0.08
+  sprite_scale_min: 0.01
   sprite_scale_max: 0.25
   components_per_img_min: 1
-  components_per_img_max: 5
+  components_per_img_max: 1
   allow_random_rotation: true
   require_full_visibility: true  # false = permite que los componentes se corten en los bordes
 
   # YOLO training
   yolo_model: "yolov8n.pt"
-  epochs: 100
+  epochs: 300
   imgsz: 640
   patience: 20
   project: "Liard_Detection"
@@ -49,8 +49,8 @@ global:
 # them, slice into tiles, and populate backgrounds_dir automatically.
 # Set "enabled: false" or remove the section to skip (use existing backgrounds).
 backgrounds:
-  enabled: true
-  dxf_sources_dir: "input/planos_completos"   # folder with full-plan .dxf files
+  enabled: false
+  dxf_sources_dir: "input/backgrounds"   # folder with full-plan .dxf files
   tile_size: 640                               # tile size in pixels
   overlap: 320                                 # overlap between tiles (pixels)
   render_dpi: 4098                             # high DPI for full plans
@@ -59,14 +59,14 @@ backgrounds:
 # ── Training Augmentation ─────────────────────────────────────────────────────
 # Controls YOLO's built-in augmentation during training.
 # IMPORTANT for synthetic data: aggressive augmentation prevents overfitting
-# (the model memorising your sprites instead of learning real patterns).
+# (the model memorizing your sprites instead of learning real patterns).
 # All values are passed directly to model.train().
 # Docs: https://docs.ultralytics.com/modes/train/#augmentation-settings
 augmentation:
   hsv_h: 0.015          # Hue shift (fraction of 360°)
   hsv_s: 0.7            # Saturation shift
   hsv_v: 0.4            # Value/brightness shift
-  degrees: 15.0         # Random rotation ±degrees
+  degrees: 0.0         # Random rotation ±degrees
   translate: 0.1        # Random translation ±fraction of image
   scale: 0.5            # Random scale gain ±fraction
   shear: 2.0            # Random shear ±degrees
@@ -109,29 +109,43 @@ modifiers:
 components:
   - name: "interruptor_termomagnetico"
     dxf_path:
-      - "input/component.dxf"
-    images_to_generate: 2500
+      - "input/components/component.dxf"
+    images_to_generate: 5000
     sprite_variations: 99
-    line_thickness_range: [2, 100]
-    polarity_filters: []
+    line_thickness_range: [5, 100]
+    polarity_filters: ["invert","threshold"]  # opciones: "invert", "threshold"
 
-#  - name: "interruptor_diferencial"
+  - name: "interruptor_diferencial"
+    dxf_path:
+      - "input/components/component_2.dxf"
+    images_to_generate: 5000
+    sprite_variations: 99
+    line_thickness_range: [ 5, 100 ]
+    polarity_filters: ["invert","threshold"]
+
+#  - name: "interruptor_diferencial_3"
 #    dxf_path:
-#      - "input/components/component_2.dxf"
 #      - "input/components/component_4.dxf"
-#      - "input/components/component_5.dxf"
 #    images_to_generate: 5000
 #    sprite_variations: 99
 #    line_thickness_range: [ 2, 100 ]
-#    polarity_filters: [ ]
-#
-#  - name: "interruptor_seccionador"
-#    dxf_path:
-#      - "input/components/component_INTERRUPTOR_SECCIONADOR.dxf"
-#    images_to_generate: 5000
-#    sprite_variations: 99
-#    line_thickness_range: [ 2, 100 ]
-#    polarity_filters: [ ]
+#    polarity_filters: ["invert","threshold"]
+
+  - name: "interruptor_diferencial_4"
+    dxf_path:
+      - "input/components/component_5.dxf"
+    images_to_generate: 5000
+    sprite_variations: 99
+    line_thickness_range: [ 5, 100 ]
+    polarity_filters: ["invert","threshold"]
+
+  - name: "interruptor_seccionador"
+    dxf_path:
+      - "input/components/component_INTERRUPTOR_SECCIONADOR.dxf"
+    images_to_generate: 5000
+    sprite_variations: 99
+    line_thickness_range: [ 5, 100 ]
+    polarity_filters: ["invert","threshold"]
 
 
 

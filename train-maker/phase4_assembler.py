@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from config import (
     BACKGROUNDS_DIR,
@@ -122,13 +123,57 @@ def split_and_copy(
         print(f"[Fase 4] {split:5s}: {len(pair_list)} muestras copiadas")
 
 
+def _augment_background(img: np.ndarray, rng: random.Random) -> np.ndarray:
+    """Apply random augmentations to a background image to create a unique variant.
+
+    Augmentations applied (all lightweight, preserving the 'empty plan' look):
+      - Random crop (70-100% of the image) + resize back to original size
+      - Random horizontal / vertical flip
+      - Random brightness & contrast jitter
+    """
+    h, w = img.shape[:2]
+
+    # 1. Random crop (70–100 % area) then resize back
+    crop_frac = rng.uniform(0.70, 1.0)
+    ch, cw = int(h * crop_frac), int(w * crop_frac)
+    y0 = rng.randint(0, max(h - ch, 0))
+    x0 = rng.randint(0, max(w - cw, 0))
+    cropped = img[y0 : y0 + ch, x0 : x0 + cw]
+    if cropped.shape[0] != h or cropped.shape[1] != w:
+        cropped = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
+
+    # 2. Random flips
+    if rng.random() < 0.5:
+        cropped = cv2.flip(cropped, 1)   # horizontal
+    if rng.random() < 0.3:
+        cropped = cv2.flip(cropped, 0)   # vertical
+
+    # 3. Brightness / contrast jitter
+    alpha = rng.uniform(0.8, 1.2)   # contrast
+    beta = rng.randint(-25, 25)     # brightness
+    cropped = cv2.convertScaleAbs(cropped, alpha=alpha, beta=beta)
+
+    return cropped
+
+
 def inject_negatives(
     dirs: dict[str, Path],
     bg_dir: Path,
     negative_ratio: float = NEGATIVE_RATIO,
     seed: int = 99,
 ) -> None:
-    random.seed(seed)
+    """Inject background-only (negative) images into each dataset split.
+
+    The number of negatives per split is calculated dynamically from
+    *negative_ratio* — defined as the fraction of negatives in the final
+    split (``n_neg / (n_pos + n_neg) == negative_ratio``).
+
+    When the available background pool is smaller than the required count,
+    augmented variants are generated on the fly (random crop, flip,
+    brightness jitter) so the target is **always** met.
+    """
+    rng = random.Random(seed)
+
     bg_paths: list[Path] = []
     for ext in ("*.jpg", "*.jpeg", "*.png", "*.tif"):
         bg_paths.extend(bg_dir.glob(ext))
@@ -146,21 +191,64 @@ def inject_negatives(
         out_labels = dirs[f"{split}_labels"]
 
         n_pos = len(list(out_imgs.glob("*.*")))
-        if negative_ratio >= 1.0:
-            n_neg = len(bg_paths)
-        else:
-            n_neg = min(int(n_pos * negative_ratio / (1.0 - negative_ratio)), len(bg_paths))
+        if n_pos == 0:
+            print(f"[Fase 4] {split:5s}: 0 negativos (sin imágenes positivas)")
+            continue
 
-        sampled = random.sample(bg_paths, min(n_neg, len(bg_paths)))
-        for i, bg_path in enumerate(sampled):
-            stem = f"negative_{split}_{i:04d}"
+        # Dynamic calculation: negative_ratio = n_neg / (n_pos + n_neg)
+        # Solving for n_neg: n_neg = n_pos * negative_ratio / (1 - negative_ratio)
+        if negative_ratio >= 1.0:
+            # Edge case: ratio=1.0 means "all negatives" — use pool size as cap
+            n_neg = max(len(bg_paths), n_pos)
+        else:
+            n_neg = int(n_pos * negative_ratio / (1.0 - negative_ratio))
+
+        n_neg = max(n_neg, 1)  # always inject at least 1 if ratio > 0
+
+        # Determine how many come from unique backgrounds vs augmented variants
+        n_unique = min(n_neg, len(bg_paths))
+        n_augmented = n_neg - n_unique
+
+        # Select unique backgrounds (use all if needed, otherwise sample)
+        if n_unique >= len(bg_paths):
+            selected = list(bg_paths)
+        else:
+            selected = rng.sample(bg_paths, n_unique)
+
+        injected = 0
+        # Pass 1: copy unique backgrounds
+        for i, bg_path in enumerate(selected):
+            stem = f"negative_{split}_{i:05d}"
             img = cv2.imread(str(bg_path))
             if img is None:
                 continue
             cv2.imwrite(str(out_imgs / f"{stem}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
             (out_labels / f"{stem}.txt").touch()
+            injected += 1
 
-        print(f"[Fase 4] {split:5s}: {len(sampled)} negativos inyectados")
+        # Pass 2: generate augmented variants to fill the gap
+        if n_augmented > 0:
+            print(
+                f"[Fase 4] {split:5s}: pool insuficiente ({len(bg_paths)} fondos), "
+                f"generando {n_augmented} variantes aumentadas..."
+            )
+        for j in range(n_augmented):
+            src_path = rng.choice(bg_paths)
+            img = cv2.imread(str(src_path))
+            if img is None:
+                continue
+            aug_img = _augment_background(img, rng)
+            stem = f"negative_{split}_aug_{j:05d}"
+            cv2.imwrite(str(out_imgs / f"{stem}.jpg"), aug_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            (out_labels / f"{stem}.txt").touch()
+            injected += 1
+
+        pct = injected / (n_pos + injected) * 100 if (n_pos + injected) > 0 else 0
+        print(
+            f"[Fase 4] {split:5s}: {injected} negativos inyectados "
+            f"({n_unique} únicos + {injected - n_unique} aumentados) — "
+            f"{pct:.1f}% del split"
+        )
 
 
 def generate_yolo_yaml(dataset_dir: Path, cfg: PipelineConfig) -> Path:
