@@ -23,7 +23,7 @@ def redimensionar_proporcional(img, max_ancho=1280, max_alto=720):
 
 def probar_plano_real():
     # 1. Cargamos el modelo
-    ruta_modelo = r"C:\Users\Tomas\Documents\LAB3\CLAUDIO_AI\best.pt"
+    ruta_modelo = r"C:\Users\juani\faculty\4Ano\CLAUDIO_AI\dxf\best.pt"
     model = YOLO(ruta_modelo)
 
     ruta_imagen_real = "img.png"  # Reemplazá con tu imagen
