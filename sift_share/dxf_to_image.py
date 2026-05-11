@@ -3,8 +3,10 @@ Renderiza un DXF a UNA imagen PNG con escala consistente entre planos.
 Genera tambien un .json con los metadatos necesarios para mapear
 detecciones (pixeles) -> coordenadas CAD.
 
-A diferencia del enfoque de tiles en CAD: aca una sola imagen, y el
-slicing lo hace SAHI directamente sobre la imagen final.
+Es independiente del metodo de deteccion posterior (sirve para YOLO,
+SIFT, template matching, etc.).
+
+Requiere: pip install ezdxf matplotlib pillow
 """
 
 import os
@@ -14,14 +16,6 @@ import ezdxf
 from ezdxf.addons.drawing import RenderContext, Frontend
 from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 from ezdxf.addons.drawing.config import Configuration
-
-# Forzamos backend Agg ANTES de importar pyplot.
-# Con el backend default (TkAgg en Windows), matplotlib usa GDI para asignar
-# pixmaps, lo cual falla en imagenes > ~16k px de lado con el error
-# "Tk_GetPixmap: Error from CreateDIBSection".
-# Agg renderiza a buffer directo, sin GDI ni Tk, y maneja cualquier tamano.
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from PIL import Image
 
@@ -48,9 +42,7 @@ def _aplicar_filtro_capas(doc, capas_incluir):
 def _forzar_color_negro(doc):
     """
     Setea color 7 (negro/blanco segun fondo) a TODAS las capas y entidades.
-    Es mas robusto que depender de Configuration.color_policy entre versiones.
     """
-    # Color 7 en AutoCAD = blanco sobre fondo oscuro, negro sobre fondo claro
     for layer in doc.layers:
         try:
             layer.color = 7
@@ -59,7 +51,7 @@ def _forzar_color_negro(doc):
     for entity in doc.modelspace():
         try:
             if hasattr(entity.dxf, "color"):
-                entity.dxf.color = 256  # 256 = "BYLAYER", asi hereda el negro de la capa
+                entity.dxf.color = 256  # 256 = "BYLAYER", hereda de la capa
         except Exception:
             pass
 
@@ -67,7 +59,7 @@ def _forzar_color_negro(doc):
 def _post_procesar_bw(image_path, modo):
     """
     modo: "color" (no toca), "grayscale" (gris en 3 canales), "binary" (1-bit B&N).
-    Mantiene 3 canales RGB para que YOLO no se queje del input.
+    Mantiene 3 canales RGB (PIL lo guarda asi por compatibilidad).
     """
     if modo == "color":
         return
@@ -84,13 +76,21 @@ def _post_procesar_bw(image_path, modo):
 def renderizar_dxf(dxf_path, output_path, capas_incluir=None, target_px=64,
                     modo_color="color", max_dim_px=MAX_DIM_PX_DEFAULT):
     """
-    Renderiza dxf_path -> output_path.
-    capas_incluir: si se pasa, solo esas capas se dibujan.
-    modo_color: "color" | "grayscale" | "mono" | "binary".
-        - "mono"      : fuerza todas las entidades a negro DURANTE el render.
-        - "grayscale" : render normal y luego post-procesa a gris (3 canales).
-        - "binary"    : render normal y luego umbraliza a B&N puro.
-        - "color"     : default, sin cambios.
+    Renderiza dxf_path -> output_path con escala consistente.
+
+    Parametros:
+      dxf_path: archivo DXF de entrada.
+      output_path: PNG de salida.
+      capas_incluir: lista de nombres de capa a dibujar; None = todas.
+      target_px: tamano objetivo en px de un simbolo tipico (64 para YOLO,
+                 100-200 para SIFT).
+      modo_color: "color" | "grayscale" | "mono" | "binary".
+          - "mono"      : fuerza todas las entidades a negro DURANTE el render.
+          - "grayscale" : render normal y luego post-procesa a gris (3 canales).
+          - "binary"    : render normal y luego umbraliza a B&N puro.
+          - "color"     : default, sin cambios.
+      max_dim_px: techo del lado mayor de la imagen (RAM safety).
+
     Devuelve dict con metadatos (tambien guardado como JSON al lado).
     """
     px_per_cad, ref = calcular_factor_escala(dxf_path, target_px=target_px)
@@ -124,9 +124,7 @@ def renderizar_dxf(dxf_path, output_path, capas_incluir=None, target_px=64,
         ancho_px = int(round(ancho_cad * px_per_cad))
         alto_px = int(round(alto_cad * px_per_cad))
         print(f"[scale] limitado a {ancho_px}x{alto_px} (cap={max_dim_px})")
-        print(f"[scale] aviso: los simbolos quedaron mas chicos que el target "
-              f"{target_px}px; YOLO puede perder precision. "
-              f"Considera --max-dim-px mas alto o --zoom < 1.")
+        print(f"[scale] aviso: simbolos quedaron mas chicos que {target_px}px target.")
 
     pad_cad = PAD_PX / px_per_cad
 
@@ -151,7 +149,8 @@ def renderizar_dxf(dxf_path, output_path, capas_incluir=None, target_px=64,
     plt.close(fig)
 
     # Post-procesado a B&N si corresponde (grayscale / binary)
-    _post_procesar_bw(output_path, modo_color if modo_color in ("grayscale", "binary") else "color")
+    _post_procesar_bw(output_path,
+                      modo_color if modo_color in ("grayscale", "binary") else "color")
     print(f"[color] modo={modo_color}")
 
     metadata = {
@@ -182,4 +181,4 @@ if __name__ == "__main__":
     import sys
     dxf = sys.argv[1] if len(sys.argv) > 1 else "plano.dxf"
     out = sys.argv[2] if len(sys.argv) > 2 else "plano_render.png"
-    renderizar_dxf(dxf, out)
+    renderizar_dxf(dxf, out, modo_color="grayscale", target_px=150)

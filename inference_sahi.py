@@ -15,6 +15,7 @@ Requiere: pip install sahi ultralytics opencv-python
 
 import os
 import json
+import time
 import argparse
 from collections import Counter
 
@@ -173,6 +174,111 @@ def filtrar_por_confianza(detecciones, conf_min):
     return filtradas
 
 
+def correr_sahi_batched(modelo_sahi, image_path, meta,
+                         slice_size=640, overlap=0.2,
+                         batch_size=16, verbose=True):
+    """
+    Slicing manual + batch inference + mapeo a CAD en una sola pasada.
+
+    A diferencia de get_sliced_prediction (que procesa los tiles 1x1),
+    aca agrupamos los tiles en lotes y los pasamos juntos al modelo YOLO,
+    aprovechando la vectorizacion del framework. Speedup tipico 3x-8x.
+
+    Tambien reportamos progreso en tiempo real (batch por batch) con ETA.
+
+    Devuelve lista de dicts con: clase, conf, bbox_px, centro_px, x_cad, y_cad
+    (mismo formato que mapear_a_cad).
+    """
+    slice_result = slice_image(
+        image=image_path,
+        slice_height=slice_size,
+        slice_width=slice_size,
+        overlap_height_ratio=overlap,
+        overlap_width_ratio=overlap,
+        min_area_ratio=0.1,
+    )
+
+    n_total = len(slice_result)
+    n_batches = (n_total + batch_size - 1) // batch_size
+
+    yolo_model = modelo_sahi.model
+    conf_threshold = modelo_sahi.confidence_threshold
+
+    px_per_cad = meta["px_per_cad"]
+    x_min_cad = meta["x_min_cad"]
+    y_max_cad = meta["y_max_cad"]
+
+    print(f"[batch] {n_total} tiles totales | batch_size={batch_size} | "
+          f"{n_batches} batches")
+
+    detecciones = []
+    t_start = time.time()
+
+    for batch_idx in range(n_batches):
+        t_batch_start = time.time()
+        start = batch_idx * batch_size
+        end = min(start + batch_size, n_total)
+
+        batch_images = []
+        batch_offsets = []
+        for i in range(start, end):
+            sl = slice_result[i]
+            batch_images.append(sl["image"])
+            batch_offsets.append(sl["starting_pixel"])
+
+        # Batch inference (ultralytics acepta listas nativamente)
+        results = yolo_model(batch_images, verbose=False, conf=conf_threshold)
+
+        n_batch_dets = 0
+        for i, result in enumerate(results):
+            x_off, y_off = batch_offsets[i]
+            boxes = result.boxes
+            if boxes is None or len(boxes) == 0:
+                continue
+            xyxy = boxes.xyxy.cpu().numpy()
+            confs = boxes.conf.cpu().numpy()
+            clses = boxes.cls.cpu().numpy().astype(int)
+            names = result.names
+
+            for j in range(len(boxes)):
+                x1, y1, x2, y2 = xyxy[j]
+                gx1 = float(x1 + x_off)
+                gy1 = float(y1 + y_off)
+                gx2 = float(x2 + x_off)
+                gy2 = float(y2 + y_off)
+                cx_px = (gx1 + gx2) / 2.0
+                cy_px = (gy1 + gy2) / 2.0
+
+                x_cad = x_min_cad + cx_px / px_per_cad
+                y_cad = y_max_cad - cy_px / px_per_cad
+
+                detecciones.append({
+                    "clase": names[int(clses[j])],
+                    "conf": float(confs[j]),
+                    "bbox_px": [gx1, gy1, gx2, gy2],
+                    "centro_px": [cx_px, cy_px],
+                    "x_cad": x_cad,
+                    "y_cad": y_cad,
+                })
+                n_batch_dets += 1
+
+        t_batch = time.time() - t_batch_start
+        t_total = time.time() - t_start
+        pct = (end / n_total) * 100
+        eta = (t_total / end) * (n_total - end) if end < n_total else 0
+
+        if verbose:
+            print(f"[batch] {batch_idx+1:3d}/{n_batches}  "
+                  f"tiles {start+1:4d}-{end:<4d}/{n_total}  "
+                  f"({pct:5.1f}%)  "
+                  f"+{n_batch_dets:2d} det (acum: {len(detecciones)})  "
+                  f"t={t_batch:.2f}s  ETA={eta:.0f}s")
+
+    print(f"[batch] inferencia completa: {len(detecciones)} detecciones "
+          f"crudas en {time.time()-t_start:.1f}s")
+    return detecciones
+
+
 def correr_sahi(modelo, image_path, slice_size=640, overlap=0.2,
                 postprocess_threshold=0.5):
     """
@@ -306,7 +412,7 @@ def ejecutar(modelo_path, image_path, meta_path,
              conf=0.25, conf_min=0.5, iou_global=0.5,
              slice_size=640, overlap=0.2,
              zoom=1.0, min_tiles_por_eje=None,
-             save_slices=False,
+             save_slices=False, batch_size=16,
              device="cpu", model_type="yolov8"):
     os.makedirs(output_dir, exist_ok=True)
     with open(meta_path) as f:
@@ -325,11 +431,14 @@ def ejecutar(modelo_path, image_path, meta_path,
                        slice_size=slice_size, overlap=overlap)
 
     modelo = cargar_modelo(modelo_path, conf=conf, device=device, model_type=model_type)
-    resultado = correr_sahi(modelo, image_path,
-                            slice_size=slice_size, overlap=overlap)
 
-    detecciones = mapear_a_cad(resultado, meta)
-    print(f"[sahi] detecciones tras NMS por clase: {len(detecciones)}")
+    # Inferencia con batching + progreso en tiempo real
+    detecciones = correr_sahi_batched(
+        modelo, image_path, meta,
+        slice_size=slice_size, overlap=overlap,
+        batch_size=batch_size,
+    )
+    print(f"[batch] detecciones crudas (pre-filtros): {len(detecciones)}")
 
     detecciones = descartar_pegadas_al_borde(detecciones, meta)
     print(f"[borde] detecciones tras filtro de borde: {len(detecciones)}")
@@ -400,6 +509,9 @@ if __name__ == "__main__":
     parser.add_argument("--overlap", type=float, default=0.2)
     parser.add_argument("--save-slices", action="store_true",
                         help="Guarda los tiles que SAHI usa, en out/slices/")
+    parser.add_argument("--batch-size", type=int, default=16,
+                        help="Tiles procesados por batch (subi a 32 con GPU "
+                             "buena, baja a 4 en CPU si te quedas sin RAM)")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--model-type", default="yolov8")
     args = parser.parse_args()
@@ -407,4 +519,5 @@ if __name__ == "__main__":
              args.conf, args.conf_min, args.iou,
              args.slice, args.overlap,
              args.zoom, args.min_tiles, args.save_slices,
+             args.batch_size,
              args.device, args.model_type)
