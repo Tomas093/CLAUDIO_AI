@@ -1,13 +1,13 @@
 {
   "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\1er Piso\\TS-JC3E.dxf",
   "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\1er Piso\\TS-JC3E.png",
-  "px_per_cad": 47.57338705253451,
-  "x_min_cad": 3180.738260001017,
-  "y_min_cad": 1449.9422511281177,
-  "x_max_cad": 3854.7333209624294,
-  "y_max_cad": 1595.9189367368504,
-  "image_width_px": 32064,
-  "image_height_px": 6945,
+  "px_per_cad": 23.786693526267253,
+  "x_min_cad": 3180.0656150206487,
+  "y_min_cad": 1449.2696061477495,
+  "x_max_cad": 3855.4059659427976,
+  "y_max_cad": 1596.5915817172186,
+  "image_width_px": 16064,
+  "image_height_px": 3504,
   "scale_reference": {
     "tipo": "INSERT_diag",
     "valor_cad": 1.1861592798491074

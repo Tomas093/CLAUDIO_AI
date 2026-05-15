@@ -1,0 +1,8 @@
+# Dataset de una sola clase: ojo_de_buey
+
+path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset/dataset_ojo_de_buey
+train: images/train
+val:   images/val
+
+nc: 1
+names: ["ojo_de_buey"]
