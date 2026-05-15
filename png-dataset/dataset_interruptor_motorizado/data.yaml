@@ -1,0 +1,8 @@
+# Dataset de una sola clase: interruptor_motorizado
+
+path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset/dataset_interruptor_motorizado
+train: images/train
+val:   images/val
+
+nc: 1
+names: ["interruptor_motorizado"]

@@ -4,5 +4,5 @@ path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset
 train: images/train
 val:   images/val
 
-nc: 4
-names: ['interruptor_termomagnetico', 'interruptor_diferencial', 'interruptor_seleccionador_manual', 'ojo_de_buey']
+nc: 7
+names: ['interruptor_termomagnetico', 'interruptor_diferencial', 'interruptor_seleccionador_manual', 'ojo_de_buey', 'multi_medidor', 'seleccionador_bajo_carga', 'interruptor_motorizado']

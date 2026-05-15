@@ -201,6 +201,12 @@ def main():
                              "guardar un tile. 0.01 = descarta tiles con "
                              "menos del 1%% de contenido (default). "
                              "0 = guarda todo sin filtrar.")
+    parser.add_argument("--renders-dir",   default=None,
+                        help="Carpeta de destino para los PNG completos. "
+                             "Default: <out>/renders")
+    parser.add_argument("--tiles-dir",     default=None,
+                        help="Carpeta de destino para los tiles. "
+                             "Default: <out>/tiles")
     parser.add_argument("--save-grids",    action="store_true",
                         help="Guarda PNG con el grid de slicing por DXF")
     parser.add_argument("--force",         action="store_true",
@@ -211,8 +217,8 @@ def main():
 
     dataset_root = Path(args.dataset)
     out_root     = Path(args.out)
-    renders_dir  = out_root / "renders"
-    tiles_dir    = out_root / "tiles"
+    renders_dir  = Path(args.renders_dir) if args.renders_dir else out_root / "renders"
+    tiles_dir    = Path(args.tiles_dir)   if args.tiles_dir   else out_root / "tiles"
     grids_dir    = out_root / "grids" if args.save_grids else None
 
     if not dataset_root.exists():

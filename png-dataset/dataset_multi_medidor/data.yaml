@@ -1,0 +1,8 @@
+# Dataset de una sola clase: multi_medidor
+
+path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset/dataset_multi_medidor
+train: images/train
+val:   images/val
+
+nc: 1
+names: ["multi_medidor"]

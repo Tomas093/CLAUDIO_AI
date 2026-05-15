@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\Azotea\\TSFM-1N.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\test_fix.png",
+  "px_per_cad": 53.955654259301085,
+  "x_min_cad": 3577.7263582899222,
+  "y_min_cad": 1630.606341744201,
+  "x_max_cad": 3602.4182426275784,
+  "y_max_cad": 1649.7905986109824,
+  "image_width_px": 1332,
+  "image_height_px": 1035,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "color"
+}
