@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\planta baja\\Tablero tsbpn.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\planta baja\\Tablero tsbpn.png",
+  "px_per_cad": 53.955654259301085,
+  "x_min_cad": 3596.5326060522784,
+  "y_min_cad": 1393.6450972143014,
+  "x_max_cad": 3611.9123007565513,
+  "y_max_cad": 1406.5751809959675,
+  "image_width_px": 830,
+  "image_height_px": 698,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}

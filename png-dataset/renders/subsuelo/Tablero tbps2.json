@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\subsuelo\\Tablero tbps2.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\subsuelo\\Tablero tbps2.png",
+  "px_per_cad": 38.78787878788199,
+  "x_min_cad": 3629.269545743219,
+  "y_min_cad": 1259.669607519867,
+  "x_max_cad": 3644.820002015741,
+  "y_max_cad": 1281.15957376717,
+  "image_width_px": 603,
+  "image_height_px": 834,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.6499999999998636
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}

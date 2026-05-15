@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\2do Piso\\TS2AN.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\2do Piso\\TS2AN.png",
+  "px_per_cad": 53.955654259301085,
+  "x_min_cad": 3616.767936860235,
+  "y_min_cad": 1527.3818930202835,
+  "x_max_cad": 3654.1955913122692,
+  "y_max_cad": 1543.9020976936695,
+  "image_width_px": 2019,
+  "image_height_px": 891,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}

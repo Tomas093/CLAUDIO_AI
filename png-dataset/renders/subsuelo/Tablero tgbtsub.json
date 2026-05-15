@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\subsuelo\\Tablero tgbtsub.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\subsuelo\\Tablero tgbtsub.png",
+  "px_per_cad": 53.74958448459785,
+  "x_min_cad": 3577.7000344033395,
+  "y_min_cad": 1357.4883168345968,
+  "x_max_cad": 3633.1143082396384,
+  "y_max_cad": 1376.2340388705375,
+  "image_width_px": 2978,
+  "image_height_px": 1008,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1907068792008886
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}

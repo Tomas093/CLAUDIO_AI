@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\1er Piso\\TS-TL1E.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\1er Piso\\TS-TL1E.png",
+  "px_per_cad": 53.955654259301085,
+  "x_min_cad": 3626.5271039009194,
+  "y_min_cad": 1450.0213192270794,
+  "x_max_cad": 3636.492663231458,
+  "y_max_cad": 1462.7493853316046,
+  "image_width_px": 538,
+  "image_height_px": 687,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}

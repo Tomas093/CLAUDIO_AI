@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\Azotea\\TS4-C.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\Azotea\\TS4-C.png",
+  "px_per_cad": 53.955654259301085,
+  "x_min_cad": 3699.1734116485586,
+  "y_min_cad": 1613.9312341030463,
+  "x_max_cad": 3708.4237373461774,
+  "y_max_cad": 1625.7730707786536,
+  "image_width_px": 499,
+  "image_height_px": 639,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}

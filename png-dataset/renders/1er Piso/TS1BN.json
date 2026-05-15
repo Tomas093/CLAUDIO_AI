@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\1er Piso\\TS1BN.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\1er Piso\\TS1BN.png",
+  "px_per_cad": 53.955654259301085,
+  "x_min_cad": 3723.2309339308085,
+  "y_min_cad": 1474.8375766302304,
+  "x_max_cad": 3753.592216077027,
+  "y_max_cad": 1491.4068802065685,
+  "image_width_px": 1638,
+  "image_height_px": 894,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}

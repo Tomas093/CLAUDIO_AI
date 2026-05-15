@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-dataset\\1er Piso\\TS-JF1N.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\png-dataset\\renders\\1er Piso\\TS-JF1N.png",
+  "px_per_cad": 53.955654259301085,
+  "x_min_cad": 3713.9955725028585,
+  "y_min_cad": 1450.0218164685614,
+  "x_max_cad": 3745.077268173797,
+  "y_max_cad": 1462.9519002502286,
+  "image_width_px": 1677,
+  "image_height_px": 698,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}
