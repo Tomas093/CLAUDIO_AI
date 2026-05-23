@@ -1,0 +1,5 @@
+train: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/datasets_out/single_multi_medidor/images/train
+val:   C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/datasets_out/single_multi_medidor/images/val
+
+nc: 1
+names: ["multi_medidor"]

@@ -1,0 +1,6 @@
+path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset-remapped/single_multi_medidor
+train: images/train
+val:   images/train
+
+nc: 1
+names: ["multi_medidor"]

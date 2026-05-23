@@ -1,0 +1,26 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf\\TGBT_materiales_not_normalized_spec.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\pipeline_out\\ft_v3_tgbt3\\plano_render.png",
+  "px_per_cad": 7.868080695175661,
+  "x_min_cad": -394.87299077704574,
+  "y_min_cad": 108.15263907210307,
+  "x_max_cad": -9.137889655532774,
+  "y_max_cad": 295.47195517930203,
+  "image_width_px": 3035,
+  "image_height_px": 1474,
+  "scale_reference": {
+    "tipo": "INSERT_lado",
+    "valor_cad": 8.13413111525938
+  },
+  "capas_incluir": null,
+  "modo_color": "color",
+  "render_v2": true,
+  "region_contenido": {
+    "x_min": -373.0000358124307,
+    "y_min": 190.8905062776084,
+    "x_max": -36.36932978116965,
+    "y_max": 237.3616890275043,
+    "n_simbolos": 34
+  },
+  "aviso": null
+}

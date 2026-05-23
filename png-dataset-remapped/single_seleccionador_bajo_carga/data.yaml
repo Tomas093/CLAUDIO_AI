@@ -1,0 +1,6 @@
+path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset-remapped/single_seleccionador_bajo_carga
+train: images/train
+val:   images/val
+
+nc: 1
+names: ["seleccionador_bajo_carga"]

@@ -1,0 +1,5 @@
+train: C:\Users\juani\faculty\4Ano\LabIII\CLAUDIO_AI\synth_all\images\train
+val:   C:\Users\juani\faculty\4Ano\LabIII\CLAUDIO_AI\synth_all\images\val
+
+nc: 7
+names: ["ojo_de_buey", "interruptor_termomagnetico", "interruptor_diferencial", "interruptor_seleccionador_manual", "seleccionador_bajo_carga", "multi_medidor", "interruptor_motorizado"]

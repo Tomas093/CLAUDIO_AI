@@ -1,0 +1,26 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf-specs\\test5_textos_negro.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\resultados\\test5negro\\plano_render.png",
+  "px_per_cad": 53.95565425929526,
+  "x_min_cad": 3580.426108099908,
+  "y_min_cad": 1418.042793084667,
+  "x_max_cad": 3613.6781400634472,
+  "y_max_cad": 1435.6910600376889,
+  "image_width_px": 1794,
+  "image_height_px": 952,
+  "scale_reference": {
+    "tipo": "INSERT_lado",
+    "valor_cad": 1.1861592798492355
+  },
+  "capas_incluir": null,
+  "modo_color": "color",
+  "render_v2": true,
+  "region_contenido": {
+    "x_min": 3581.917310193392,
+    "y_min": 1421.862429005744,
+    "x_max": 3611.830081890867,
+    "y_max": 1429.2963079176,
+    "n_simbolos": 32
+  },
+  "aviso": null
+}

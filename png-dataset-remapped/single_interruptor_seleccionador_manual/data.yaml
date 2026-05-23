@@ -1,0 +1,6 @@
+path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset-remapped/single_interruptor_seleccionador_manual
+train: images/train
+val:   images/val
+
+nc: 1
+names: ["interruptor_seleccionador_manual"]

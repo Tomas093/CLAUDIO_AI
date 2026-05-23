@@ -1,0 +1,5 @@
+train: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/datasets_out/single_ojo_de_buey/images/train
+val:   C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/datasets_out/single_ojo_de_buey/images/val
+
+nc: 1
+names: ["ojo_de_buey"]

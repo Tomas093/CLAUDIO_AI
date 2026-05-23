@@ -1,0 +1,6 @@
+path: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/png-dataset-remapped/single_ojo_de_buey
+train: images/train
+val:   images/val
+
+nc: 1
+names: ["ojo_de_buey"]

@@ -1,0 +1,5 @@
+train: C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/datasets_out/single_seleccionador_bajo_carga/images/train
+val:   C:/Users/juani/faculty/4Ano/LabIII/CLAUDIO_AI/datasets_out/single_seleccionador_bajo_carga/images/val
+
+nc: 1
+names: ["seleccionador_bajo_carga"]

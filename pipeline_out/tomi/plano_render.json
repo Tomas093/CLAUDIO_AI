@@ -1,0 +1,26 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf\\tomi.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\pipeline_out\\tomi\\plano_render.png",
+  "px_per_cad": 0.8178913738013085,
+  "x_min_cad": 1383.0428885841534,
+  "y_min_cad": -390.5417494601636,
+  "x_max_cad": 6266.9380823724805,
+  "y_max_cad": 1971.5581304730156,
+  "image_width_px": 3994,
+  "image_height_px": 1932,
+  "scale_reference": {
+    "tipo": "INSERT_lado",
+    "valor_cad": 78.25000000005821
+  },
+  "capas_incluir": null,
+  "modo_color": "color",
+  "render_v2": true,
+  "region_contenido": {
+    "x_min": -848794.9302325551,
+    "y_min": 107.2953107675724,
+    "x_max": 5742.906316698014,
+    "y_max": 508737.7780756543,
+    "n_simbolos": 22
+  },
+  "aviso": null
+}
