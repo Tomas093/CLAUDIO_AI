@@ -1,11 +1,8 @@
 import os
-from io import BytesIO
-
 import ezdxf
 from ezdxf.addons.drawing import RenderContext, Frontend
 from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 import matplotlib.pyplot as plt
-from PIL import Image
 
 
 def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300):
@@ -69,15 +66,7 @@ def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300)
             nombre_archivo = f"tile_X{x_actual:.2f}_Y{y_actual:.2f}.png"
             ruta_completa = os.path.join(output_folder, nombre_archivo)
 
-            buffer = BytesIO()
-            plt.savefig(buffer, format='png', dpi=dpi, facecolor=fig.get_facecolor(), edgecolor='none')
-            buffer.seek(0)
-
-            imagen = Image.open(buffer).convert('L')
-            imagen_bn = imagen.point(lambda px: 255 if px > 245 else 0, mode='L')
-            imagen_bn.save(ruta_completa)
-
-            buffer.close()
+            plt.savefig(ruta_completa, dpi=dpi, facecolor=fig.get_facecolor(), edgecolor='none')
             plt.close(fig)
 
             print(f"Guardado: {nombre_archivo}")
@@ -91,9 +80,9 @@ def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300)
 
 # --- EJECUCIÓN ---
 generar_tiles_manuales(
-    dxf_path="2tableros.dxf",
+    dxf_path="plano.dxf",
     output_folder="./tiles_output_manual",
     tile_size= 5,
-    overlap= 1.5,
+    overlap= 1,
     dpi=300
 )

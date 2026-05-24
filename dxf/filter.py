@@ -141,9 +141,9 @@ def ejecutar_conteo_liard(ruta_modelo, carpeta_tiles, tile_size_cad, umbral_dist
 # --- EJECUCIÓN ---
 if __name__ == "__main__":
     conteo, detalles = ejecutar_conteo_liard(
-        ruta_modelo="best_2_components.pt",
+        ruta_modelo="best.pt",
         carpeta_tiles="./tiles_output_manual",
-        tile_size_cad=5,  # Ajustá esto según cómo sacaste los tiles
-        umbral_distancia=1.25,  # Distancia mínima entre dos componentes reales
-        umbral_confianza=0.90  # Solo cuenta objetos si la IA tiene un 50% o más de seguridad
+        tile_size_cad=50,  # Ajustá esto según cómo sacaste los tiles
+        umbral_distancia=5,  # Distancia mínima entre dos componentes reales
+        umbral_confianza=0.80  # Solo cuenta objetos si la IA tiene un 50% o más de seguridad
     )

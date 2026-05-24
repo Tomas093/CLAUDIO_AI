@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\CLAUDIO_AI\\dxf\\plano5.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\CLAUDIO_AI\\pipeline_out\\plano_render.png",
+  "px_per_cad": 266.66666666741446,
+  "x_min_cad": 3333.5831119562354,
+  "y_min_cad": 1581.2759712384523,
+  "x_max_cad": 3398.1606760625627,
+  "y_max_cad": 1621.9792556787997,
+  "image_width_px": 17221,
+  "image_height_px": 10854,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 0.23999999999932697
+  },
+  "capas_incluir": null,
+  "modo_color": "grayscale"
+}
