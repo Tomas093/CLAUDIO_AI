@@ -1,0 +1,24 @@
+{
+  "dxf_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\dxf\\plano4.dxf",
+  "image_path": "C:\\Users\\juani\\faculty\\4Ano\\LabIII\\CLAUDIO_AI\\juani\\pipeline_out\\plano4\\plano_render.png",
+  "px_per_cad": 53.955654259295265,
+  "x_min_cad": 3587.928647910262,
+  "y_min_cad": 1284.738549074196,
+  "x_max_cad": 3601.851046516881,
+  "y_max_cad": 1298.379360319198,
+  "image_width_px": 751,
+  "image_height_px": 736,
+  "scale_reference": "INSERT_lado=1.1862",
+  "color_policy": "texto_blanco",
+  "color_mode": "color",
+  "layers_include": null,
+  "region_contenido": {
+    "x_min": 3589.738103417817,
+    "y_min": 1288.368821559346,
+    "x_max": 3597.431754614745,
+    "y_max": 1292.917567214717,
+    "n_simbolos": 8
+  },
+  "aviso": null,
+  "render_version": "refactored"
+}

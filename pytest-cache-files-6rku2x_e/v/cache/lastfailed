@@ -1,0 +1,7 @@
+{
+  "juani/tests/test_pipeline_integration.py::test_pipeline_run_produces_output_files": true,
+  "juani/tests/test_pipeline_integration.py::test_pipeline_detections_json_format": true,
+  "juani/tests/test_pipeline_integration.py::test_pipeline_empty_detections": true,
+  "juani/tests/test_pipeline_integration.py::test_ensemble_pipeline_aggregates_models": true,
+  "juani/tests/test_pipeline_integration.py::test_meta_json_has_required_fields": true
+}
