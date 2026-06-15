@@ -10,8 +10,8 @@
 *.ico
 *.psd
 *.txt
-/train-maker/input
-/train-maker/output
+/train-maker/input/
+/train-maker/output/
 /pipeline_out
 /pipeline_out_plano3
 
