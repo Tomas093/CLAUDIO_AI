@@ -19,6 +19,10 @@ import time
 import argparse
 from collections import Counter
 
+import PIL
+from PIL import Image
+Image.MAX_IMAGE_PIXELS = None
+
 import numpy as np
 import cv2
 
@@ -38,7 +42,7 @@ def cargar_modelo(ruta_modelo, conf=0.25, device="cpu", model_type="yolov8"):
 
 def calcular_slice_size(image_path, base_slice=640, zoom=1.0,
                         min_tiles_por_eje=None,
-                        slice_min=160, slice_max=1280):
+                        slice_min=160, slice_max=8000):
     """
     Calcula el slice_size efectivo segun el tamano de la imagen.
 
@@ -172,6 +176,55 @@ def filtrar_por_confianza(detecciones, conf_min):
     if n_descartadas > 0:
         print(f"[conf-min] {n_descartadas} descartadas por conf < {conf_min}")
     return filtradas
+
+
+def filtrar_outliers_tamano(detecciones, factor=3.0):
+    """
+    Elimina detecciones cuyo ancho o alto se desvía demasiado de la mediana
+    de su clase. Útil para descartar falsos positivos en rectángulos random
+    que no tienen el tamaño esperado del símbolo.
+
+    factor: un bbox se descarta si w > median_w * factor o h > median_h * factor
+            o w < median_w / factor o h < median_h / factor.
+    """
+    if len(detecciones) < 4:
+        return detecciones
+
+    from statistics import median
+
+    # Agrupar por clase
+    por_clase = {}
+    for d in detecciones:
+        por_clase.setdefault(d["clase"], []).append(d)
+
+    sobrevivientes = []
+    descartados = []
+    for clase, dets in por_clase.items():
+        if len(dets) < 4:
+            sobrevivientes.extend(dets)
+            continue
+
+        widths = [d["bbox_px"][2] - d["bbox_px"][0] for d in dets]
+        heights = [d["bbox_px"][3] - d["bbox_px"][1] for d in dets]
+        med_w = median(widths)
+        med_h = median(heights)
+
+        for d in dets:
+            w = d["bbox_px"][2] - d["bbox_px"][0]
+            h = d["bbox_px"][3] - d["bbox_px"][1]
+            if (w > med_w * factor or w < med_w / factor or
+                    h > med_h * factor or h < med_h / factor):
+                descartados.append((d, w, h, med_w, med_h))
+            else:
+                sobrevivientes.append(d)
+
+    if descartados:
+        print(f"[tamano] {len(descartados)} detecciones descartadas por tamaño anómalo:")
+        for d, w, h, mw, mh in descartados[:10]:
+            print(f"   - {d['clase']:<25} conf={d['conf']:.3f}  "
+                  f"size=({w:.0f}x{h:.0f})  median=({mw:.0f}x{mh:.0f})")
+
+    return sobrevivientes
 
 
 def correr_sahi_batched(modelo_sahi, image_path, meta,
@@ -395,21 +448,75 @@ def mapear_a_cad(resultado_sahi, meta):
 
 
 def dibujar(image_path, detecciones, output_path):
-    img = cv2.imread(image_path)
-    if img is None:
-        return
+    from PIL import Image, ImageDraw, ImageFont
+
+    img = Image.open(image_path)
+    if img.mode != "RGB":
+        img = img.convert("RGBA")
+        base = Image.new("RGB", img.size, (255, 255, 255))
+        base.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
+        img = base
+
+    # Create an overlay for semi-transparent labels
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw_main = ImageDraw.Draw(img)
+    draw_over = ImageDraw.Draw(overlay)
+
+    thickness = 2
+    font_size = 11
+
+    font = None
+    font_names = ["arial.ttf", "calibri.ttf", "msyh.ttc", "cour.ttf"]
+    for fn in font_names:
+        try:
+            font = ImageFont.truetype(fn, font_size)
+            break
+        except IOError:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+
     for d in detecciones:
-        x1, y1, x2, y2 = (int(v) for v in d["bbox_px"])
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 200, 0), 2)
-        label = f"{d['clase']} {d['conf']:.2f}"
-        cv2.putText(img, label, (x1, max(y1 - 5, 12)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 0), 1)
-    cv2.imwrite(output_path, img)
+        x1, y1, x2, y2 = d["bbox_px"]
+
+        # Draw bounding box outline only (thin)
+        draw_main.rectangle([x1, y1, x2, y2], outline=(0, 200, 0), width=thickness)
+
+        # Abbreviated label: just confidence
+        label = f".{int(d['conf']*100)}"
+
+        # Calculate text size
+        try:
+            if hasattr(font, "getbbox"):
+                l, t, r, b = font.getbbox(label)
+                text_w = r - l
+                text_h = b - t
+            else:
+                text_w, text_h = draw_main.textsize(label, font=font)
+        except Exception:
+            text_w, text_h = len(label) * 7, 12
+
+        # Position label above the box, offset left so it doesn't overlap
+        label_x = x2 + 2
+        label_y = y1
+
+        # Semi-transparent background for label
+        draw_over.rectangle(
+            [label_x, label_y, label_x + text_w + 4, label_y + text_h + 2],
+            fill=(0, 180, 0, 160)
+        )
+        draw_over.text((label_x + 2, label_y + 1), label,
+                       fill=(255, 255, 255, 255), font=font)
+
+    # Composite overlay onto image
+    img = Image.alpha_composite(img.convert("RGBA"), overlay)
+    img = img.convert("RGB")
+    img.save(output_path, quality=95)
 
 
 def ejecutar(modelo_path, image_path, meta_path,
              output_dir="./resultados",
-             conf=0.25, conf_min=0.5, iou_global=0.5,
+             conf=0.25, conf_min=0.65, iou_global=0.5,
              slice_size=640, overlap=0.2,
              zoom=1.0, min_tiles_por_eje=None,
              save_slices=False, batch_size=16,
@@ -451,6 +558,9 @@ def ejecutar(modelo_path, image_path, meta_path,
 
     detecciones = filtrar_por_confianza(detecciones, conf_min)
     print(f"[conf] detecciones tras conf_min={conf_min}: {len(detecciones)}")
+
+    detecciones = filtrar_outliers_tamano(detecciones, factor=1.5)
+    print(f"[tamano] detecciones tras filtro de outliers: {len(detecciones)}")
 
     json_path = os.path.join(output_dir, "detecciones.json")
     with open(json_path, "w") as f:
@@ -497,7 +607,7 @@ if __name__ == "__main__":
                         help="Umbral de confianza interno de SAHI (bajo "
                              "permite mejor merging; usar --conf-min para "
                              "filtro final)")
-    parser.add_argument("--conf-min", type=float, default=0.5,
+    parser.add_argument("--conf-min", type=float, default=0.65,
                         help="Confianza minima del filtro post-proceso")
     parser.add_argument("--iou", type=float, default=0.5,
                         help="IoU para el NMS agnostico de clase")

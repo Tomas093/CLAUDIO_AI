@@ -77,6 +77,14 @@ class GlobalConfig:
     output_dir: Path
     dataset_dir: Path
 
+    # Isolated YOLO output workspace (absolute path, outside train-maker/).
+    # All Ultralytics run artefacts (weights, plots, metrics) land here.
+    yolo_workspace: Path = Path("yolo_workspace")
+
+    # Training mode: "per_component" = one YOLO model per DXF (nc=1 each)
+    #                "unified"       = one model with all classes (nc=N)
+    training_mode: str = "per_component"
+
     # Split ratios
     train_ratio: float = 0.80
     val_ratio: float = 0.10
@@ -107,6 +115,11 @@ class GlobalConfig:
     imgsz: int = 640
     patience: int = 20
     project: str = "Liard_Detection"
+    
+    # Fine-tuning
+    epochs_finetune: int = 100
+    lr0_finetune: float = 0.001
+    lrf_finetune: float = 0.001
 
     # Validation safety
     max_missing_labels_pct: float = 5.0
@@ -128,6 +141,8 @@ class ComponentConfig:
     line_thickness_range: list[int] = field(default_factory=lambda: [2, 150])
     polarity_filters: list[str] = field(default_factory=list)
     class_id: int = 0  # assigned at load time
+    roboflow_zip_path: Optional[Path] = None
+    skip_training: bool = False
 
 
 @dataclass
@@ -178,11 +193,21 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
 
     # ── Global block ──────────────────────────────────────────────────────
+    # Project root is one level above train-maker/ (i.e. CLAUDIO_AI/)
+    PROJECT_ROOT = BASE_DIR.parent
+
     g_raw = raw.get("global", {})
+
+    # Resolve absolute yolo_workspace path
+    _yolo_ws_raw = g_raw.get("yolo_workspace", "yolo_workspace")
+    yolo_workspace = (PROJECT_ROOT / _yolo_ws_raw).resolve()
+
     g = GlobalConfig(
         backgrounds_dir=BASE_DIR / g_raw.get("backgrounds_dir", "output/backgrounds"),
         output_dir=BASE_DIR / g_raw.get("output_dir", "output"),
         dataset_dir=BASE_DIR / g_raw.get("dataset_dir", "dataset"),
+        yolo_workspace=yolo_workspace,
+        training_mode=str(g_raw.get("training_mode", "per_component")),
         train_ratio=float(g_raw.get("train_ratio", 0.80)),
         val_ratio=float(g_raw.get("val_ratio", 0.10)),
         test_ratio=float(g_raw.get("test_ratio", 0.10)),
@@ -202,6 +227,9 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
         imgsz=int(g_raw.get("imgsz", 640)),
         patience=int(g_raw.get("patience", 20)),
         project=str(g_raw.get("project", "Liard_Detection")),
+        epochs_finetune=int(g_raw.get("epochs_finetune", 100)),
+        lr0_finetune=float(g_raw.get("lr0_finetune", 0.001)),
+        lrf_finetune=float(g_raw.get("lrf_finetune", 0.001)),
         max_missing_labels_pct=float(
             raw.get("validation", {}).get("max_missing_labels_pct", 5.0)
         ),
@@ -290,6 +318,8 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
         return normalized
 
     components: list[ComponentConfig] = []
+    training_mode = g.training_mode
+
     for idx, c_raw in enumerate(raw.get("components", [])):
         lt = c_raw.get("line_thickness_range", [2, 150])
 
@@ -298,6 +328,13 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
         raw_paths = c_raw.get("dxf_paths", c_raw.get("dxf_path", None))
         dxf_paths = _normalize_dxf_paths(raw_paths, component_name)
 
+        # In per-component mode, every model is single-class (class_id=0).
+        # In unified mode, classes get sequential IDs.
+        cid = 0 if training_mode == "per_component" else idx
+
+        zip_path_str = c_raw.get("roboflow_zip_path")
+        roboflow_zip_path = (BASE_DIR / zip_path_str) if zip_path_str else None
+
         comp = ComponentConfig(
             name=component_name,
             dxf_paths=dxf_paths,
@@ -305,7 +342,9 @@ def load_config(path: Optional[Path] = None) -> PipelineConfig:
             sprite_variations=int(c_raw.get("sprite_variations", 150)),
             line_thickness_range=[int(lt[0]), int(lt[1])],
             polarity_filters=list(c_raw.get("polarity_filters", [])),
-            class_id=idx,
+            class_id=cid,
+            roboflow_zip_path=roboflow_zip_path,
+            skip_training=bool(c_raw.get("skip_training", False)),
         )
         components.append(comp)
 

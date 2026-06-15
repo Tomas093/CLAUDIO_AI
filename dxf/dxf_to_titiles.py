@@ -5,7 +5,7 @@ from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 import matplotlib.pyplot as plt
 
 
-def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300):
+def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300, max_tiles=5):
     """
     Divide un plano DXF en recortes solapados usando valores de escala manuales.
     Incluye el fix para ezdxf en el cálculo del Bounding Box.
@@ -40,6 +40,10 @@ def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300)
         return
 
     ctx = RenderContext(doc)
+    
+    # FORZAMOS INICIO DONDE HAY SÍMBOLOS PARA DEMOSTRACIÓN (evita espacios en blanco)
+    x_min = 3345.0
+    y_min = 1605.0
     x_actual = x_min
     contador = 0
 
@@ -71,18 +75,25 @@ def generar_tiles_manuales(dxf_path, output_folder, tile_size, overlap, dpi=300)
 
             print(f"Guardado: {nombre_archivo}")
             contador += 1
+            
+            if contador >= max_tiles:
+                break
 
             y_actual += paso
+        if contador >= max_tiles:
+            break
         x_actual += paso
 
     print(f"Listo. Se generaron {contador} imágenes.")
 
 
 # --- EJECUCIÓN ---
-generar_tiles_manuales(
-    dxf_path="plano.dxf",
-    output_folder="./tiles_output_manual",
-    tile_size= 5,
-    overlap= 1,
-    dpi=300
-)
+if __name__ == "__main__":
+    generar_tiles_manuales(
+        dxf_path="jijiji.dxf",
+        output_folder="../pipeline_out/tiles_output_highres",
+        tile_size=5.0,
+        overlap=1.0,
+        dpi=300,
+        max_tiles=5
+    )

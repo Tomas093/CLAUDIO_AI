@@ -33,11 +33,11 @@ Image.MAX_IMAGE_PIXELS = None
 from scale_analyzer import calcular_factor_escala
 
 # Limite de pixeles por lado por defecto (subible con argumento)
-MAX_DIM_PX_DEFAULT = 16000
+MAX_DIM_PX_DEFAULT = 32000
 PAD_PX = 32  # padding negro/blanco para que simbolos en el borde no queden cortados
 
 
-def _aplicar_filtro_capas(doc, capas_incluir):
+def aplicar_filtro_capas(doc, capas_incluir):
     """Apaga las capas que no estan en capas_incluir."""
     capas_set = {c.upper() for c in capas_incluir}
     for layer in doc.layers:
@@ -45,23 +45,24 @@ def _aplicar_filtro_capas(doc, capas_incluir):
             layer.off()
 
 
-def _forzar_color_negro(doc):
-    """
-    Setea color 7 (negro/blanco segun fondo) a TODAS las capas y entidades.
-    Es mas robusto que depender de Configuration.color_policy entre versiones.
-    """
-    # Color 7 en AutoCAD = blanco sobre fondo oscuro, negro sobre fondo claro
-    for layer in doc.layers:
+def forzar_color_negro(doc):
+    def override_color(entity):
         try:
-            layer.color = 7
+            entity.rgb = (0, 0, 0)
         except Exception:
             pass
-    for entity in doc.modelspace():
         try:
             if hasattr(entity.dxf, "color"):
-                entity.dxf.color = 256  # 256 = "BYLAYER", asi hereda el negro de la capa
+                del entity.dxf.color
         except Exception:
             pass
+
+    for entity in doc.modelspace():
+        override_color(entity)
+        
+    for block in doc.blocks:
+        for entity in block:
+            override_color(entity)
 
 
 def _post_procesar_bw(image_path, modo):
@@ -100,10 +101,10 @@ def renderizar_dxf(dxf_path, output_path, capas_incluir=None, target_px=64,
     msp = doc.modelspace()
 
     if capas_incluir:
-        _aplicar_filtro_capas(doc, capas_incluir)
+        aplicar_filtro_capas(doc, capas_incluir)
 
     if modo_color == "mono":
-        _forzar_color_negro(doc)
+        forzar_color_negro(doc)
 
     bbox = ezdxf.bbox.extents(msp)
     if not bbox.has_data:

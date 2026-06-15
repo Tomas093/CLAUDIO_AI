@@ -12,8 +12,7 @@ Con filtrado de capas (recomendado para subir precision):
 import os
 import argparse
 
-from dxf_to_image import renderizar_dxf
-from inference_sahi import ejecutar
+from vector_inference import ejecutar_vectorial
 
 
 def correr_pipeline(dxf_path, modelo_path,
@@ -27,26 +26,25 @@ def correr_pipeline(dxf_path, modelo_path,
                     zoom=1.0, min_tiles_por_eje=None,
                     save_slices=False, batch_size=16,
                     device="cpu", model_type="yolov8"):
-    os.makedirs(output_dir, exist_ok=True)
-
-    img_path = os.path.join(output_dir, "plano_render.png")
-    meta = renderizar_dxf(
-        dxf_path, img_path,
+    
+    # max_dim_px, zoom, min_tiles_por_eje are ignored in the new vector pipeline
+    # as scaling and tiling is handled infinitely and natively based on target_px.
+    
+    return ejecutar_vectorial(
+        dxf_path=dxf_path,
+        modelo_path=modelo_path,
+        output_dir=output_dir,
         capas_incluir=capas_incluir,
         target_px=target_px,
         modo_color=modo_color,
-        max_dim_px=max_dim_px,
-    )
-    meta_path = os.path.splitext(img_path)[0] + ".json"
-
-    return ejecutar(
-        modelo_path, img_path, meta_path,
-        output_dir=output_dir,
-        conf=conf, conf_min=conf_min, iou_global=iou_global,
-        slice_size=slice_size, overlap=overlap,
-        zoom=zoom, min_tiles_por_eje=min_tiles_por_eje,
-        save_slices=save_slices, batch_size=batch_size,
-        device=device, model_type=model_type,
+        conf=conf,
+        conf_min=conf_min,
+        iou_global=iou_global,
+        slice_size=slice_size,
+        overlap=overlap,
+        save_slices=save_slices,
+        batch_size=batch_size,
+        device=device
     )
 
 

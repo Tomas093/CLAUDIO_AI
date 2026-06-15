@@ -337,9 +337,10 @@ def generate_one_sample(
         bg = composite_sprite_on_bg(bg, canvas, px, py)
         placed_rects.append((px, py, c_w, c_h))
 
-        # 7. Extraer coordenadas FINALES del canvas COMPLETO (base + modificador)
-        #    El bbox debe envolver todo el canvas compuesto, no solo la base.
-        bbox = calculate_yolo_bbox(px, py, c_w, c_h, w_bg, h_bg, class_id=class_id)
+        # 7. Extraer coordenadas FINALES solo de la BASE (el componente real).
+        #    Se usa base_roi para excluir los modificadores/distractores del bbox.
+        bx, by, bw, bh = base_roi
+        bbox = calculate_yolo_bbox(px + bx, py + by, bw, bh, w_bg, h_bg, class_id=class_id)
         if bbox is not None:
             bboxes.append(bbox)
 

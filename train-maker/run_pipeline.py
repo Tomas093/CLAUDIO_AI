@@ -1,37 +1,62 @@
 # run_pipeline.py — Phase 5: Master Controller
 # Iterates through every component defined in components_config.yaml,
-# runs Phases 0→4 sequentially, then assembles the unified dataset,
-# validates it, and optionally kicks off YOLO training.
+# runs Phase 1 & 2/3 sequentially, assembles the synthetic dataset,
+# trains Phase 1 (sintético), ingests real data (if any), and trains Phase 2.
 from __future__ import annotations
 
+import gc
+import logging
+import shutil
+import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
-from config import load_config, PipelineConfig, ComponentConfig
+# Fix Windows encoding
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+from config import load_config, PipelineConfig, ComponentConfig, BASE_DIR
 from generate_backgrounds import generate_backgrounds
 from phase1_extractor import generate_sprite_variations
 from phase2_3_fusion_labeler import generate_synthetic_dataset
-from phase4_assembler import (
-    assemble_dataset,
-    create_yolo_structure,
-    generate_yolo_yaml,
-    inject_negatives,
-    print_dataset_summary,
-    split_and_copy,
-    _collect_all_component_images,
-)
-from validate_dataset import validate_dataset
+from phase4_assembler import assemble_synthetic
+from manual_ingestor import ingest_roboflow_zip
+
+
+def setup_logger() -> logging.Logger:
+    """Configura el logger nativo de Python para archivo y consola."""
+    logger = logging.getLogger("LiardPipeline")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    
+    # Limpiar handlers si ya existen
+    if logger.handlers:
+        logger.handlers.clear()
+        
+    formatter = logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = BASE_DIR / f"pipeline_run_{timestamp}.log"
+    
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    
+    return logger
+
+log = setup_logger()
 
 
 def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
-    """Run Phase 1 + Phase 2/3 for a single component.
-
-    If the component has multiple DXF variants (e.g. IEC + ANSI symbols),
-    each variant is processed independently — generating *images_to_generate*
-    images per variant, all with the same *class_id*.
-    """
-
+    """Run Phase 1 + Phase 2/3 for a single component."""
     n_variants = cfg.component_variant_count(comp)
 
     for vi, dxf_path in enumerate(comp.dxf_paths):
@@ -40,8 +65,7 @@ def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
         synthetic_dir = cfg.component_synthetic_dir(comp, vi)
 
         # ── Phase 1: Sprite extraction ────────────────────────────────────
-        print(f"  ▶ FASE 1 — Sprites de '{comp.name}'{variant_label}")
-        t0 = time.time()
+        log.info(f"[{comp.name}] [FASE 1] Sprites{variant_label}...")
         generate_sprite_variations(
             dxf_path=dxf_path,
             output_dir=sprites_dir,
@@ -51,18 +75,16 @@ def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
             dpi=cfg.g.render_dpi,
             component_name=comp.name,
         )
-        print(f"    ⏱  {time.time() - t0:.1f}s\n")
 
         # ── Phase 2/3: Synthetic image generation ─────────────────────────
-        print(f"  ▶ FASES 2/3 — Generación sintética de '{comp.name}'{variant_label}")
-        t0 = time.time()
+        log.info(f"[{comp.name}] [FASES 2/3] Generación sintética{variant_label}...")
         generate_synthetic_dataset(
             sprites_dir=sprites_dir,
             bg_dir=cfg.g.backgrounds_dir,
             output_dir=synthetic_dir,
             n_total=comp.images_to_generate,
             component_name=comp.name,
-            class_id=comp.class_id,
+            class_id=0, # Single-class
             sprite_scale_min=cfg.g.sprite_scale_min,
             sprite_scale_max=cfg.g.sprite_scale_max,
             components_min=cfg.g.components_per_img_min,
@@ -77,145 +99,136 @@ def _process_component(cfg: PipelineConfig, comp: ComponentConfig) -> None:
             modifier_thickness_max=cfg.modifiers.thickness_dilation[1],
             require_full_visibility=cfg.g.require_full_visibility,
         )
-        print(f"    ⏱  {time.time() - t0:.1f}s\n")
 
 
-def run_pipeline(auto_train: bool = True) -> None:
-    """Execute the full LIARD pipeline end-to-end.
+def _cleanup_component_dirs(component_name: str, cfg: PipelineConfig) -> None:
+    """Borra carpetas de datos tras un entrenamiento exitoso."""
+    def _get_size(path: Path) -> float:
+        if not path.exists(): return 0
+        return sum(f.stat().st_size for f in path.rglob('*') if f.is_file()) / (1024 * 1024)
 
-    Parameters
-    ----------
-    auto_train : bool
-        If *True* (default), automatically invoke YOLO training after
-        validation passes.  Set to *False* for data-generation-only runs.
-    """
+    dirs_to_clean = [
+        BASE_DIR / f"dataset_sintetico_{component_name}",
+        BASE_DIR / f"dataset_real_{component_name}"
+    ]
+    
+    # Agregar carpetas de variantes (sprites y synthetic)
+    for comp in cfg.components:
+        if comp.name == component_name:
+            for vi in range(cfg.component_variant_count(comp)):
+                dirs_to_clean.append(cfg.component_sprites_dir(comp, vi))
+                dirs_to_clean.append(cfg.component_synthetic_dir(comp, vi))
 
+    for d in dirs_to_clean:
+        if d.exists():
+            mb_size = _get_size(d)
+            shutil.rmtree(d, ignore_errors=True)
+            log.info(f"[{component_name}] [CLEANUP] Borrada {d.name} ({mb_size:.1f} MB)")
+
+
+def run_pipeline() -> None:
     cfg = load_config()
 
-    print("\n" + "═" * 60)
-    print("  LIARD — Synthetic Data Generation Pipeline")
-    print("═" * 60)
-    print(f"  Componentes: {len(cfg.components)}")
-    for c in cfg.components:
-        n_v = len(c.dxf_paths)
-        total_imgs = c.images_to_generate * n_v
-        variant_info = f"  ({n_v} variantes × {c.images_to_generate} = {total_imgs})" if n_v > 1 else ""
-        print(f"    [{c.class_id}] {c.name}  →  {total_imgs} imgs{variant_info}")
-    if cfg.backgrounds.enabled:
-        print(f"  Backgrounds: auto-generados desde '{cfg.backgrounds.dxf_sources_dir}'")
-    print()
-
-    t_global = time.time()
-
-    # ── Validate component DXFs ───────────────────────────────────────────
+    log.info("=" * 60)
+    log.info("  LIARD — Pipeline de Generación y Entrenamiento")
+    log.info("=" * 60)
+    log.info(f"Componentes: {len(cfg.components)}")
+    
+    # Validación DXFs
     for comp in cfg.components:
         for dxf_path in comp.dxf_paths:
             if not dxf_path.exists():
-                raise FileNotFoundError(
-                    f"No se encontró el archivo DXF: {dxf_path}\n"
-                    f"Componente: {comp.name}"
-                )
+                raise FileNotFoundError(f"DXF faltante: {dxf_path}")
 
-    # ── Phase 0: Background generation from DXF floor plans ──────────────
+    # Phase 0: Backgrounds
     if cfg.backgrounds.enabled:
-        print(f"\n{'─' * 60}")
-        print("  ▶ FASE 0 — Generación de Backgrounds desde planos DXF")
-        print(f"{'─' * 60}\n")
+        log.info("[GLOBAL] [FASE 0] Generando backgrounds...")
+        generate_backgrounds()
 
-        t0 = time.time()
-        n_tiles = generate_backgrounds()
-        print(f"    ⏱  {time.time() - t0:.1f}s\n")
-
-        if n_tiles == 0:
-            print("  ⚠️  No se generaron backgrounds. Verificá que haya .dxf en:")
-            print(f"      {cfg.backgrounds.dxf_sources_dir}")
-
-    # ── Validate backgrounds exist ────────────────────────────────────────
     bg_dir = cfg.g.backgrounds_dir
-    has_backgrounds = bg_dir.exists() and any(bg_dir.iterdir())
-    if not has_backgrounds:
-        raise FileNotFoundError(
-            f"La carpeta de fondos está vacía: {bg_dir}\n"
-            "Opciones:\n"
-            "  1. Poné imágenes de planos reales en esa carpeta, o\n"
-            "  2. Configurá backgrounds.enabled: true y poné .dxf en\n"
-            f"     {cfg.backgrounds.dxf_sources_dir}"
-        )
+    if not (bg_dir.exists() and any(bg_dir.iterdir())):
+        raise FileNotFoundError(f"Carpeta de fondos vacía: {bg_dir}")
 
-    # ── Per-component generation (Phase 1 + 2/3) ─────────────────────────
+    # Verificación preliminar
+    try:
+        from verification_renderer import run_verification
+        run_verification(cfg)
+    except Exception as exc:
+        log.warning(f"[GLOBAL] [VERIFICACIÓN] Falló visualización: {exc}")
+
+    results = []
+
     for comp in cfg.components:
-        print(f"\n{'─' * 60}")
-        print(f"  COMPONENTE: {comp.name}  (class_id={comp.class_id})")
-        print(f"{'─' * 60}\n")
-        _process_component(cfg, comp)
+        pass # Skip condition removed
+        log.info("-" * 60)
+        log.info(f"[{comp.name}] INICIANDO PROCESO")
+        log.info("-" * 60)
+        
+        success = False
+        t_start = time.time()
+        
+        try:
+            # 1. Generación de datos
+            _process_component(cfg, comp)
+            
+            # 2. Ensamblar YAML sintético
+            if getattr(comp, 'skip_training', False):
+                log.info(f"[{comp.name}] [SKIP] Skip training activado. Omitiendo fases 4 y entrenamiento.")
+                continue
 
-    # ── Phase 4: Assemble unified dataset ─────────────────────────────────
-    print(f"\n{'─' * 60}")
-    print("  ▶ FASE 4 — Ensamblaje del Dataset (Split 80/10/10)")
-    print(f"{'─' * 60}\n")
+            log.info(f"[{comp.name}] [FASE 4] Ensamblando dataset sintético...")
+            synth_yaml = assemble_synthetic(comp.name, cfg)
+            
+            # 3. Entrenar Fase 1 (Sintética) vía subprocess para aislar VRAM
+            log.info(f"[{comp.name}] [FASE 1 ENTRENAMIENTO] Lanzando subprocess...")
+            cmd_p1 = [sys.executable, "train.py", "--component", comp.name, "--phase", "1", "--data-yaml", str(synth_yaml)]
+            res_p1 = subprocess.run(cmd_p1)
+            if res_p1.returncode != 0:
+                raise RuntimeError(f"Fallo en Fase 1 (sintética) para {comp.name}")
+                
+            best_synth = cfg.g.yolo_workspace / f"phase1_{comp.name}" / "weights" / "best.pt"
+            
+            # 4. Entrenar Fase 2 (Fine-tune real) si corresponde
+            if comp.roboflow_zip_path and comp.roboflow_zip_path.exists():
+                log.info(f"[{comp.name}] [INGESTA] Procesando ZIP de Roboflow...")
+                real_yaml = ingest_roboflow_zip(comp.roboflow_zip_path, comp.name)
+                
+                log.info(f"[{comp.name}] [FASE 2 ENTRENAMIENTO] Fine-tuning vía subprocess...")
+                cmd_p2 = [sys.executable, "train.py", "--component", comp.name, "--phase", "2", 
+                          "--data-yaml", str(real_yaml), "--base-weights", str(best_synth)]
+                res_p2 = subprocess.run(cmd_p2)
+                if res_p2.returncode != 0:
+                    raise RuntimeError(f"Fallo en Fase 2 (fine-tune) para {comp.name}")
+            else:
+                log.info(f"[{comp.name}] [FASE 2] Sin datos reales (roboflow_zip_path no definido/no encontrado), omitiendo Fase 2.")
+            
+            success = True
+            
+        except Exception as e:
+            log.error(f"[{comp.name}] ERROR: {e} — Conservando artifacts para debug.")
+            
+        finally:
+            gc.collect()
+            if success:
+                _cleanup_component_dirs(comp.name, cfg)
+                
+            t_elapsed = time.time() - t_start
+            results.append((comp.name, "EXITO" if success else "FALLO", t_elapsed))
 
-    t0 = time.time()
-
-    import shutil
-    if cfg.g.dataset_dir.exists():
-        shutil.rmtree(cfg.g.dataset_dir)
-
-    dirs = create_yolo_structure(cfg.g.dataset_dir)
-    pairs = _collect_all_component_images(cfg)
-
-    if not pairs:
-        raise RuntimeError("No se generaron imágenes sintéticas. Revisá los DXF y fondos.")
-
-    split_and_copy(
-        pairs, dirs,
-        train_ratio=cfg.g.train_ratio,
-        val_ratio=cfg.g.val_ratio,
-    )
-    inject_negatives(dirs, cfg.g.backgrounds_dir, cfg.g.negative_ratio)
-    yaml_path = generate_yolo_yaml(cfg.g.dataset_dir, cfg)
-    print_dataset_summary(cfg.g.dataset_dir)
-    print(f"  ⏱  {time.time() - t0:.1f}s\n")
-
-    # ── Phase 4b: Validation (sanity checks + bbox clipping) ─────────────
-    print(f"\n{'─' * 60}")
-    print("  ▶ VALIDACIÓN — Sanity Checks + Clipping de Bounding Boxes")
-    print(f"{'─' * 60}\n")
-
-    t0 = time.time()
-    val_stats = validate_dataset(
-        cfg.g.dataset_dir,
-        max_missing_labels_pct=cfg.g.max_missing_labels_pct,
-    )
-    print(f"  ⏱  {time.time() - t0:.1f}s\n")
-
-    if val_stats["images_deleted"] > 0:
-        print(f"  ⚠️  Se eliminaron {val_stats['images_deleted']} imágenes con labels irrecuperables.")
-
-    # ── Summary ───────────────────────────────────────────────────────────
-    elapsed = time.time() - t_global
-    print("═" * 60)
-    print(f"  ✅ Pipeline completado en {elapsed:.1f}s")
-    print(f"  📁 Dataset en:   {cfg.g.dataset_dir.resolve()}")
-    print(f"  📄 Config YOLO:  {yaml_path.resolve()}")
-
-    # ── Phase 5: Training ─────────────────────────────────────────────────
-    if auto_train:
-        print()
-        print(f"  🚀 Iniciando entrenamiento...")
-        print(f"     Modelo: {cfg.g.yolo_model}")
-        print(f"     Batch:  {cfg.g.batch_size}  |  Workers: {cfg.g.workers}")
-        print("═" * 60 + "\n")
-
-        from train import train_model
-        train_model(data_yaml=yaml_path)
-    else:
-        print()
-        print("  🚀 Para entrenar manualmente:")
-        print(f"     python train.py")
-        print("═" * 60 + "\n")
+    # Resumen Final
+    log.info("\n" + "=" * 60)
+    log.info("  RESUMEN FINAL")
+    log.info("=" * 60)
+    
+    # Encabezado
+    log.info(f"{'COMPONENTE'.ljust(35)} | {'ESTADO'.ljust(10)} | {'TIEMPO'.rjust(8)}")
+    log.info("-" * 60)
+    for nombre, estado, t_elap in results:
+        t_min = f"{t_elap / 60:.1f}m"
+        log.info(f"{nombre.ljust(35)} | {estado.ljust(10)} | {t_min.rjust(8)}")
+        
+    log.info("=" * 60)
 
 
 if __name__ == "__main__":
-    # Pass --no-train to skip automatic training
-    auto = "--no-train" not in sys.argv
-    run_pipeline(auto_train=auto)
+    run_pipeline()

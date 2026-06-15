@@ -1,63 +1,51 @@
-# train.py — Phase 5: YOLO training with strict VRAM control
-# Uses the Ultralytics Python API with hardware constraints from
-# components_config.yaml.  Disables auto-batching.
+# train.py — Phase 5: YOLO training in two phases (Synthetic + Fine-tune)
 from __future__ import annotations
 
+import argparse
+import shutil
 from pathlib import Path
 
 import torch
 from ultralytics import YOLO
 
-from config import load_config
+from config import PipelineConfig, load_config, BASE_DIR
 
 
-def train_model(data_yaml: Path | None = None) -> None:
-    """Launch YOLOv8 training using settings from the pipeline config.
-
-    Parameters
-    ----------
-    data_yaml : Path, optional
-        Explicit path to ``data.yaml``.  When *None* the path is
-        resolved from ``components_config.yaml → dataset_dir/data.yaml``.
-    """
-
-    cfg = load_config()
-
-    if data_yaml is None:
-        data_yaml = cfg.g.dataset_dir / "data.yaml"
-
-    if not data_yaml.exists():
-        raise FileNotFoundError(
-            f"data.yaml no encontrado: {data_yaml}\n"
-            "Ejecutá el pipeline completo antes de entrenar."
-        )
-
-    model_path = Path(__file__).resolve().parent / cfg.g.yolo_model
-    model = YOLO(str(model_path))
-
+def train_synthetic(component_name: str, data_yaml: Path, cfg: PipelineConfig) -> Path:
+    """Entrena un modelo YOLO desde cero usando el dataset sintético."""
     device = 0 if torch.cuda.is_available() else "cpu"
-    print(f"[Training] Dispositivo: {device}")
-    print(f"[Training] Modelo: {cfg.g.yolo_model}")
-    print(f"[Training] Batch size: {cfg.g.batch_size} (auto-batch DESACTIVADO)")
-    print(f"[Training] Workers: {cfg.g.workers}")
-    print(f"[Training] data.yaml: {data_yaml.resolve()}")
-
+    run_name = f"phase1_{component_name}"
+    project_dir = cfg.g.yolo_workspace
+    
+    last_pt = project_dir / run_name / "weights" / "last.pt"
+    resume = False
+    
+    if last_pt.exists():
+        print(f"\n[Phase 1] Reanudando entrenamiento para '{component_name}' desde {last_pt}")
+        model = YOLO(str(last_pt))
+        resume = True
+    else:
+        model_path = Path(__file__).resolve().parent / cfg.g.yolo_model
+        model = YOLO(str(model_path))
+        print(f"\n[Phase 1] Entrenando modelo sintético desde cero para '{component_name}'")
+    
     aug = cfg.augmentation
-    print(f"[Training] Augmentation: degrees={aug.degrees}, mosaic={aug.mosaic}, "
-          f"mixup={aug.mixup}, scale={aug.scale}, erasing={aug.erasing}")
-
+    
     model.train(
         data=str(data_yaml.resolve()),
         epochs=cfg.g.epochs,
         imgsz=cfg.g.imgsz,
-        batch=cfg.g.batch_size,          # Strict — no auto-batch
-        workers=cfg.g.workers,           # Prevents OOM on dataloaders
-        name=f"{cfg.g.project}_v1",
-        project=cfg.g.project,
+        batch=cfg.g.batch_size,
+        workers=cfg.g.workers,
+        name=run_name,
+        project=str(project_dir.resolve()),
+        exist_ok=True,
+        resume=resume,
         device=device,
         patience=cfg.g.patience,
-        # ── Augmentation (from components_config.yaml) ────────────────
-        # Controlled via YAML to prevent overfitting on synthetic sprites.
+        # lr0 no se especifica, usa default de Ultralytics
+        
+        # Augmentations para evitar overfitting en datos sintéticos
         hsv_h=aug.hsv_h,
         hsv_s=aug.hsv_s,
         hsv_v=aug.hsv_v,
@@ -72,15 +60,68 @@ def train_model(data_yaml: Path | None = None) -> None:
         mixup=aug.mixup,
         copy_paste=aug.copy_paste,
         erasing=aug.erasing,
-        # Tracking (W&B / MLflow)
-        # Set WANDB_MODE=online or configure mlflow before running.
     )
+    
+    best_pt = project_dir / run_name / "weights" / "best.pt"
+    if not best_pt.exists():
+        raise FileNotFoundError(f"Entrenamiento sintético falló para {component_name}, no se generó {best_pt}")
+        
+    return best_pt
+
+
+def train_finetune(component_name: str, data_yaml: Path, base_weights: Path, cfg: PipelineConfig) -> Path:
+    """Hace fine-tuning del modelo sintético usando datos reales."""
+    model = YOLO(str(base_weights))
+
+    device = 0 if torch.cuda.is_available() else "cpu"
+    run_name = f"phase2_{component_name}"
+    project_dir = cfg.g.yolo_workspace
+    
+    print(f"\n[Phase 2] Fine-tuning con datos reales para '{component_name}'")
+    
+    model.train(
+        data=str(data_yaml.resolve()),
+        epochs=cfg.g.epochs_finetune,
+        imgsz=cfg.g.imgsz,
+        batch=cfg.g.batch_size,
+        workers=cfg.g.workers,
+        amp=False,
+        name=run_name,
+        project=str(project_dir.resolve()),
+        exist_ok=True,
+        device=device,
+        patience=cfg.g.patience,
+        lr0=cfg.g.lr0_finetune,
+        lrf=cfg.g.lrf_finetune,
+        freeze=10,  # Congelar backbone
+    )
+    
+    best_pt = project_dir / run_name / "weights" / "best.pt"
+    if not best_pt.exists():
+        raise FileNotFoundError(f"Fine-tuning falló para {component_name}, no se generó {best_pt}")
+        
+    # Copiar a carpeta models/ en BASE_DIR (train-maker/models)
+    models_dir = BASE_DIR / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    final_model_path = models_dir / f"best_{component_name}.pt"
+    shutil.copy2(best_pt, final_model_path)
+    
+    return final_model_path
 
 
 if __name__ == "__main__":
-    print("CUDA disponible:", torch.cuda.is_available())
-    print("Versión CUDA de PyTorch:", torch.version.cuda)
-    print("Cantidad de GPUs:", torch.cuda.device_count())
-    if torch.cuda.is_available():
-        print("GPU:", torch.cuda.get_device_name(0))
-    train_model()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--component", required=True)
+    parser.add_argument("--phase", choices=["1", "2"], required=True)
+    parser.add_argument("--data-yaml", required=True)
+    parser.add_argument("--base-weights", required=False)
+    args = parser.parse_args()
+
+    cfg = load_config()
+
+    if args.phase == "1":
+        train_synthetic(args.component, Path(args.data_yaml), cfg)
+    elif args.phase == "2":
+        if not args.base_weights:
+            raise ValueError("--base-weights es requerido para la fase 2")
+        train_finetune(args.component, Path(args.data_yaml), Path(args.base_weights), cfg)

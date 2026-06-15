@@ -1,6 +1,6 @@
 # 🔧 LIARD — Guía de Uso del Pipeline de Entrenamiento
 
-Pipeline completo para generar datasets sintéticos de componentes eléctricos (desde DXF) y entrenar un modelo YOLOv8 para detección automática en planos.
+Pipeline completo para generar datasets sintéticos de componentes eléctricos (desde DXF), ingestar datos reales de Roboflow, y entrenar modelos YOLOv8/YOLO11 de **Clase Única en Dos Fases** (Single-Class Two-Phase) para detección automática en planos.
 
 ---
 
@@ -13,317 +13,157 @@ train-maker/
 ├── generate_backgrounds.py   ← Fase 0: Genera fondos desde planos DXF
 ├── phase1_extractor.py       ← Fase 1: Extrae sprites desde DXF de componentes
 ├── phase2_3_fusion_labeler.py← Fases 2/3: Fusiona sprites + fondo + auto-etiqueta
-├── phase4_assembler.py       ← Fase 4: Ensambla dataset (split 80/10/10)
+├── phase4_assembler.py       ← Fase 4: Ensambla dataset sintético
 ├── validate_dataset.py       ← Validación: Clipping de bboxes + safety checks
-├── train.py                  ← Fase 5: Entrenamiento YOLO
+├── manual_ingestor.py        ← Ingestión Automática de Zips de Roboflow
+├── train.py                  ← Fase 5: Entrenamiento YOLO (CLI interno)
 ├── run_pipeline.py           ← ⭐ CONTROLADOR MAESTRO (ejecuta todo)
 ├── input/
 │   ├── component.dxf         ← Tu DXF del componente eléctrico
+│   ├── roboflow_export.zip   ← (Opcional) ZIP de Roboflow para Fine-Tuning
 │   ├── modifiers/            ← PNGs de polos (//, ///) y símbolos extra
 │   └── planos_completos/     ← Planos DXF completos (para generar fondos)
-├── output/                   ← Sprites y sintéticos (generados)
-│   └── backgrounds/          ← Fondos (auto-generados o manuales)
-├── dataset/                  ← Dataset YOLO final (generado)
-│   ├── images/
-│   │   ├── train/
-│   │   ├── val/
-│   │   └── test/
-│   ├── labels/
-│   │   ├── train/
-│   │   ├── val/
-│   │   └── test/
-│   └── data.yaml             ← Config YOLO (auto-generada)
-└── yolov8m.pt                ← Modelo pre-entrenado
+├── output/                   ← Sprites y carpetas temporales generadas
+├── models/                   ← Modelos finales generados (best_*.pt)
+└── yolov8m.pt                ← Modelo pre-entrenado base
 ```
+
+> **Nota sobre el Workspace de YOLO**: Todos los pesos, tensores y métricas generadas por Ultralytics se guardan fuera de `train-maker` para no ensuciar el repositorio de código. Suelen guardarse en `../yolo_workspace`.
 
 ---
 
-## 🚀 Inicio Rápido (3 pasos)
+## 🚀 Inicio Rápido (4 pasos)
 
-### Paso 1: Preparar los archivos de entrada
+### Paso 1: Preparar los archivos de entrada (Sintéticos)
 
 ```bash
-# 1. Poné el DXF de tu componente eléctrico en input/
-cp mi_interruptor.dxf train-maker/input/component.dxf
+# 1. Poné el DXF de tu componente eléctrico en input/components/
+cp mi_interruptor.dxf train-maker/input/components/interruptor.dxf
 
 # 2. Poné tus planos completos (para generar fondos) en input/planos_completos/
 cp plano_tablero_*.dxf train-maker/input/planos_completos/
-
-# 3. (Opcional) Poné PNGs de polos y símbolos en input/modifiers/
-#    Estos se componen aleatoriamente sobre el sprite base
-cp polo_doble.png polo_triple.png train-maker/input/modifiers/
 ```
 
-### Paso 2: Configurar `components_config.yaml`
+### Paso 2 (Opcional): Preparar datos Reales (Fine-Tuning)
 
-Editá el archivo para ajustar tu componente:
+Si tenés datos reales etiquetados en Roboflow, descargá el export en formato "YOLOv8" (como un archivo ZIP) y dejalo en tu proyecto.
+
+```bash
+cp roboflow_export.zip train-maker/input/roboflow_interruptor.zip
+```
+
+### Paso 3: Configurar `components_config.yaml`
+
+Editá el archivo para definir tu componente y asociarlo a sus datos:
 
 ```yaml
 components:
   - name: "interruptor_termomagnetico"
-    dxf_path: "input/component.dxf"
-    images_to_generate: 10000    # Cuántas imágenes sintéticas generar
-    sprite_variations: 150       # Variaciones de grosor de línea
-    line_thickness_range: [2, 150]
+    dxf_path: 
+      - "input/components/interruptor.dxf"
+    images_to_generate: 5000     # Cuántas imágenes sintéticas generar
+    sprite_variations: 90        # Variaciones de grosor de línea
+    line_thickness_range: [10, 50]
+    polarity_filters: ["invert", "threshold"]
+    
+    # ¡Clave para la Fase 2! Ruta al ZIP descargado de Roboflow
+    roboflow_zip_path: "input/roboflow_interruptor.zip"
 ```
 
-### Paso 3: Ejecutar el pipeline
+### Paso 4: Ejecutar el pipeline
 
 ```bash
 cd train-maker/
-
-# Ejecutar todo: generar datos + validar + entrenar
-python3 run_pipeline.py
-
-# O solo generar datos (sin entrenar)
-python3 run_pipeline.py --no-train
+python run_pipeline.py
 ```
+
+El pipeline procesará cada componente de forma secuencial y generará tu modelo final en `models/best_interruptor_termomagnetico.pt`.
 
 ---
 
-## 📋 Flujo Completo del Pipeline
+## 📋 Flujo de Entrenamiento (Dos Fases / Single-Class)
+
+El pipeline actual opera de manera **secuencial por componente** bajo un enfoque de **Clase Única (Single-Class)**. Para cada componente en la lista, se ejecuta:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Fase 0 — Generación de Backgrounds                │
-│  Renderiza planos DXF completos → corta en tiles    │
-│  → filtra tiles vacíos → guarda en backgrounds/     │
+│  Fases 1 a 3 — Generación Sintética                │
+│  Extrae sprites del DXF → Fusiona con planos de    │
+│  fondo → Genera ~5000 imágenes sintéticas.         │
 └──────────────────────┬──────────────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│  Fase 1 — Extracción de Sprites (por componente)    │
-│  Lee DXF del componente → renderiza → varía grosor  │
-│  → guarda sprites PNG con transparencia             │
+│  Fase 4 — Ensamblaje Sintético                     │
+│  Empaqueta los datos en dataset_sintetico_<nombre> │
+│  y fuerza la clase a '0' (Single-Class).           │
 └──────────────────────┬──────────────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│  Fases 2/3 — Fusión + Auto-Etiquetado              │
-│  Sprite base + modifier aleatorio (prob=70%) →      │
-│  rotación aleatoria del modifier → composición →    │
-│  escala + rotación → pegar en fondo → YOLO labels   │
+│  Entrenamiento Fase 1 (Sintético)                  │
+│  Ejecuta train.py como subproceso. Entrena YOLOv8  │
+│  desde cero usando SOLO imágenes sintéticas.       │
+│  lr0 alto. Genera: phase1_<nombre>/weights/best.pt │
 └──────────────────────┬──────────────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│  Fase 4 — Ensamblaje del Dataset                    │
-│  Recolecta todos los componentes → shuffle →        │
-│  split 80/10/10 → inyecta negativos → data.yaml     │
+│  Ingestión Manual (Roboflow)                       │
+│  (Si roboflow_zip_path está definido).             │
+│  Extrae el ZIP → unifica splits → mapea la clase   │
+│  a '0' → genera dataset_real_<nombre>.             │
 └──────────────────────┬──────────────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│  Validación — Sanity Checks                         │
-│  Verifica .txt para cada .jpg → clippea bboxes      │
-│  fuera de rango → aborta si >5% sin label           │
+│  Entrenamiento Fase 2 (Fine-Tuning)                │
+│  Carga el best.pt de la Fase 1. Congela el backbone│
+│  (freeze=10). Entrena con los datos reales usando  │
+│  un lr0 muy bajo (lr0_finetune).                   │
 └──────────────────────┬──────────────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│  Fase 5 — Entrenamiento YOLO                        │
-│  YOLOv8m + batch_size/workers controlados →         │
-│  augmentation desde YAML → W&B/MLflow tracking      │
+│  Limpieza y Consolidación                          │
+│  Si todo fue exitoso, borra datasets temporales,   │
+│  libera VRAM y copia el peso final a la carpeta    │
+│  /models para su uso en producción.                │
 └─────────────────────────────────────────────────────┘
 ```
 
+> **Aislamiento de Memoria (VRAM):** Los entrenamientos de PyTorch se ejecutan en subprocesos independientes (`subprocess.run`). Esto garantiza que al terminar un modelo, el SO recupere el 100% de la VRAM y RAM, impidiendo los errores de *Out Of Memory (OOM)* cuando se entrenan decenas de componentes seguidos.
+
 ---
 
-## ⚙️ Configuración Detallada
+## ⚙️ Configuración Detallada (`components_config.yaml`)
 
-### Configuración Global
+### Configuración Global (Finetuning)
 
 ```yaml
 global:
-  # Rutas (relativas a train-maker/)
-  backgrounds_dir: "output/backgrounds"
-  output_dir: "output"
-  dataset_dir: "dataset"
-
-  # Split del dataset
-  train_ratio: 0.80    # 80% entrenamiento
-  val_ratio:   0.10    # 10% validación
-  test_ratio:  0.10    # 10% test
-
-  # Restricciones de Generación
-  require_full_visibility: true  # Si es true, el componente no puede ser cortado por los bordes
-
-  # Hardware (para GPUs de 8GB VRAM)
-  batch_size: 16       # Tamaño de batch (NO usa auto-batch)
-  workers: 4           # Workers del dataloader
-
-  # Entrenamiento
+  # Entrenamiento Sintético (Fase 1)
   yolo_model: "yolov8m.pt"
   epochs: 100
-  imgsz: 640
-  patience: 20
-  project: "Liard_Detection"
+  lr0: 0.01          # Tasa de aprendizaje normal
+
+  # Fine-tuning (Fase 2: datos reales sobre sintéticos)
+  epochs_finetune: 100
+  lr0_finetune: 0.001  # Tasa MUY BAJA para no destruir pesos previos
+  lrf_finetune: 0.001
+
+  # Output workspace para tensores (Afuera de train-maker)
+  yolo_workspace: "yolo_workspace"
 ```
 
-### Generación de Backgrounds desde DXF
+### Ingestión de ZIPs de Roboflow
 
-```yaml
-backgrounds:
-  enabled: true                              # true = genera fondos automáticamente
-  dxf_sources_dir: "input/planos_completos"  # Carpeta con planos DXF
-  tile_size: 640                             # Tamaño del tile en píxeles
-  overlap: 320                               # Solapamiento entre tiles
-  render_dpi: 4098                           # DPI alto para planos completos
-  min_std_dev: 10                            # Descarta tiles casi vacíos
-```
-
-> **Tip:** Si ya tenés imágenes de fondo (JPG/PNG), ponelas directamente en `output/backgrounds/` y usá `enabled: false`.
-
-### Augmentation (Anti-Overfitting)
-
-```yaml
-augmentation:
-  hsv_h: 0.015          # Shift de matiz
-  hsv_s: 0.7            # Shift de saturación
-  hsv_v: 0.4            # Shift de brillo
-  degrees: 15.0         # Rotación aleatoria ±grados
-  translate: 0.1        # Traslación aleatoria
-  scale: 0.5            # Escala aleatoria
-  shear: 2.0            # Cizallamiento
-  perspective: 0.0      # Distorsión de perspectiva
-  flipud: 0.1           # Prob. de flip vertical
-  fliplr: 0.5           # Prob. de flip horizontal
-  mosaic: 1.0           # Prob. de mosaico (MUY efectivo)
-  mixup: 0.15           # Prob. de MixUp
-  copy_paste: 0.1       # Prob. de copy-paste
-  erasing: 0.4          # Prob. de borrado aleatorio
-```
-
-> **¿Por qué esto importa?** Las imágenes son sintéticas — el modelo se puede memorizar tus sprites en vez de aprender patrones reales. La augmentation agresiva previene el overfitting.
-
-### Validación y Seguridad
-
-```yaml
-validation:
-  max_missing_labels_pct: 5.0   # Aborta si >5% de labels faltan
-```
-
-> **Trampa de los empty labels:** Si un bug en la Fase 2/3 no genera el 50% de los `.txt`, la validación sin este umbral pasaría "en verde" (creando archivos vacíos), entrenando un modelo que cree que "acá no hay nada" en imágenes que SÍ tienen objetos.
-
-### Modifiers (Polos y Símbolos)
-
-```yaml
-modifiers:
-  dir: "input/modifiers"      # Carpeta con PNGs (fondo transparente)
-  probability: 0.70           # 70% de prob. de agregar modifier al sprite
-  count_min: 1                # Min modifiers por sprite (cuando se usa)
-  count_max: 1                # Max modifiers por sprite (cuando se usa)
-  allow_rotation: true        # Rota el modifier aleatoriamente 0/90/180/270°
-  thickness_dilation: [1, 3]  # Grosor aleatorio de línea del modifier
-```
-
-> **¿Qué son los modifiers?** Son imágenes PNG con fondo transparente (ej: los símbolos de polos `//`, `///` que aparecen en planos eléctricos reales). Se componen **encima** del sprite base antes de pegarlo al fondo.
->
-> **¿Por qué aleatoriamente?** En planos reales no todos los componentes tienen polos, y los que tienen pueden estar rotados. La aleatorización simula esta variación natural y evita que el modelo se "memorice" un patrón fijo.
+El `manual_ingestor.py` asume que descargaste un dataset YOLO de Roboflow. El motor buscará carpetas que contengan `train`, `val`, `valid` o `test` en la ruta, y ubicará automáticamente las imágenes y etiquetas.
+Además, reescribirá el primer número de cada archivo `.txt` a un `0` estricto. Esto permite descargar un dataset multi-clase de Roboflow y usar solo los recortes que te interesan, o asegurar la consistencia.
 
 ---
 
-## 🔧 Agregar un Nuevo Componente
-
-### Componente con un solo símbolo DXF
-
-```yaml
-components:
-  - name: "contactor"
-    dxf_path: "input/contactor.dxf"      # un solo archivo DXF
-    images_to_generate: 10000
-    sprite_variations: 150
-    line_thickness_range: [2, 150]
-    polarity_filters: []
-```
-
-### Componente con múltiples símbolos (IEC + ANSI, etc.)
-
-Si un mismo componente tiene distintas representaciones visuales (ej: norma IEC vs ANSI), usá `dxf_paths` (lista). El pipeline genera **N imágenes POR CADA DXF**, todas con el mismo class_id:
-
-```yaml
-  - name: "rele_termico"
-    dxf_paths:                            # ← LISTA de DXFs
-      - "input/rele_termico_iec.dxf"      # variante IEC
-      - "input/rele_termico_ansi.dxf"     # variante ANSI
-    images_to_generate: 10000             # 10k POR variante (20k total)
-    sprite_variations: 120
-    line_thickness_range: [2, 120]
-    polarity_filters: []
-```
-
-> **Cómo funciona:** Si tenés 2 DXFs con `images_to_generate: 10000`, el pipeline genera:
-> - 10.000 imágenes del símbolo IEC → `output/rele_termico/synthetic_v0/`
-> - 10.000 imágenes del símbolo ANSI → `output/rele_termico/synthetic_v1/`
-> - Total: 20.000 imágenes, todas con `class_id: 1` (rele_termico)
-
-Los class IDs se asignan automáticamente en orden de lista (0, 1, 2…). El `data.yaml` generado tendrá:
-
-```yaml
-nc: 2
-names:
-  0: interruptor_termomagnetico
-  1: rele_termico
-```
-
-
----
-
-## 🏃 Comandos Útiles
-
-```bash
-# Pipeline completo (datos + entrenamiento)
-python3 run_pipeline.py
-
-# Solo generar datos
-python3 run_pipeline.py --no-train
-
-# Solo entrenar (después de generar datos)
-python3 train.py
-
-# Solo generar backgrounds desde planos DXF
-python3 generate_backgrounds.py
-```
-
----
-
-## 🐛 Solución de Problemas
-
-### "La carpeta de fondos está vacía"
-- Opción A: Poné imágenes JPG/PNG manualmente en `output/backgrounds/`
-- Opción B: Poné archivos `.dxf` de planos completos en `input/planos_completos/` y configurá `backgrounds.enabled: true`
-
-### "Split ratios must sum to 1.0"
-- Verificá que `train_ratio + val_ratio + test_ratio = 1.0` en el YAML
-
-### "⛔ ABORTADO: X% de las imágenes no tenían label"
-- Un bug en la generación está perdiendo archivos `.txt`
-- Revisá los logs de la Fase 2/3
-- Si es un falso positivo, subí `validation.max_missing_labels_pct` en el YAML
-
-### OOM (Out of Memory) en la GPU
-- Bajá `batch_size` a 8 o 4
-- Bajá `workers` a 2
-- Usá `yolov8n.pt` en vez de `yolov8m.pt` (modelo más chico)
-
-### Errores de Pyrefly en VS Code ("Cannot find module cv2")
-- Son **falsos positivos** del linter, no del código
-- El código funciona perfectamente en runtime
-- Se configuró un `pyproject.toml` para suprimirlos
-
----
-
-## 📊 Dependencias
-
-```bash
-pip3 install opencv-python-headless ezdxf matplotlib Pillow numpy pyyaml ultralytics torch
-```
-
----
-
-## 🎯 Resumen de Protecciones
+## 🎯 Resumen de Protecciones de esta Arquitectura
 
 | Protección | Qué hace |
 |---|---|
-| **Idempotencia** | Limpia directorios antes de generar → reiniciar no duplica archivos |
-| **Memory Management** | Escribe cada imagen a disco inmediatamente → no acumula 10k imgs en RAM |
-| **Bbox Clipping** | Coordenadas fuera de [0,1] se clampean → no borra imágenes válidas |
-| **Label Safety** | Aborta si >5% de labels faltan → detecta bugs silenciosos en generación |
-| **VRAM Control** | batch_size y workers fijos → no explota en GPUs de 8GB |
-| **Anti-Overfitting** | Augmentation controlada desde YAML → previene memorización de sprites |
-| **Modifiers Aleatorios** | Prob/rotación/grosor random → simula variación real de polos en planos |
+| **Single-Class** | Cada componente se entrena como la "clase 0", lo que facilita enormemente el fine-tuning y evita desbalances de clases en la matriz de confusión. |
+| **Backbone Congelado** | En la Fase 2, se aplica `freeze=10` para que el modelo no desaprenda la geometría sólida que asimiló viendo miles de imágenes sintéticas. |
+| **VRAM Subprocessing** | Entrenar 15 clases implicaría 30 ciclos de YOLO. El uso de `subprocess` destruye el árbol de tensores huérfanos entre cada modelo, previniendo cuelgues del sistema. |
+| **Try/Except Cleanup** | Las imágenes sintéticas (pesan GBs) se borran solas al finalizar el entrenamiento con éxito. Si el entrenamiento se cae, las carpetas se mantienen intactas para poder debuggear qué archivo rompió la corrida. |
+| **Logging Nativo** | El pipeline imprime y guarda en `pipeline_run_*.log` de manera limpia, sin requerir librerías gráficas extrañas. |
