@@ -75,7 +75,7 @@ def train_finetune(component_name: str, data_yaml: Path, base_weights: Path, cfg
 
     device = 0 if torch.cuda.is_available() else "cpu"
     run_name = f"phase2_{component_name}"
-    project_dir = cfg.g.yolo_workspace
+    project_dir = Path("C:/temp/yolo_workspace")
     
     print(f"\n[Phase 2] Fine-tuning con datos reales para '{component_name}'")
     
@@ -84,7 +84,7 @@ def train_finetune(component_name: str, data_yaml: Path, base_weights: Path, cfg
         epochs=cfg.g.epochs_finetune,
         imgsz=cfg.g.imgsz,
         batch=cfg.g.batch_size,
-        workers=cfg.g.workers,
+        workers=0,
         amp=False,
         name=run_name,
         project=str(project_dir.resolve()),
@@ -94,6 +94,7 @@ def train_finetune(component_name: str, data_yaml: Path, base_weights: Path, cfg
         lr0=cfg.g.lr0_finetune,
         lrf=cfg.g.lrf_finetune,
         freeze=10,  # Congelar backbone
+        save_period=100,
     )
     
     best_pt = project_dir / run_name / "weights" / "best.pt"

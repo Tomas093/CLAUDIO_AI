@@ -94,6 +94,40 @@ def ingest_roboflow_zip(zip_path: str | Path, component_name: str) -> Path:
                     # Normalizar y copiar label
                     _normalize_and_copy_label(lbl_src, lbl_dst)
                     
+        # --- NUEVO: Inyectar negativos de la Fase 1 balanceadamente (15% del total real) ---
+        import random
+        # Buscar el dataset sintetico de este componente
+        synth_dir = BASE_DIR / f"dataset_sintetico_{component_name}"
+        if synth_dir.exists():
+            synth_images_dir = synth_dir / "train" / "images"
+            if synth_images_dir.exists():
+                # Obtener todos los negativos (empiezan con 'neg_')
+                neg_images = list(synth_images_dir.glob("neg_*.jpg")) + list(synth_images_dir.glob("neg_*.png"))
+                if neg_images:
+                    # Contar cuantas imagenes reales hay en train
+                    real_images_count = len(list((dataset_dir / "train" / "images").glob("*.jpg"))) + len(list((dataset_dir / "train" / "images").glob("*.png")))
+                    
+                    # Calcular el limite (ej. 15% del total real)
+                    limit = max(1, int(real_images_count * 0.15))
+                    
+                    if len(neg_images) > limit:
+                        neg_images = random.Random(42).sample(neg_images, limit)
+                        
+                    print(f"[{component_name}] Inyectando {len(neg_images)} negativos en el fine-tuning (limite 15% de {real_images_count} reales)")
+                    
+                    dst_train_imgs = dataset_dir / "train" / "images"
+                    dst_train_lbls = dataset_dir / "train" / "labels"
+                    
+                    for neg_img in neg_images:
+                        shutil.copy2(neg_img, dst_train_imgs / neg_img.name)
+                        # El txt vacio
+                        neg_lbl = synth_dir / "train" / "labels" / (neg_img.stem + ".txt")
+                        if neg_lbl.exists():
+                            shutil.copy2(neg_lbl, dst_train_lbls / neg_lbl.name)
+                        else:
+                            (dst_train_lbls / (neg_img.stem + ".txt")).write_text("", encoding="utf-8")
+        # -----------------------------------------------------------------------------------
+
         # Generar YAML
         yaml_path = dataset_dir / f"real_{component_name}.yaml"
         has_val = any((dataset_dir / "val" / "images").iterdir())

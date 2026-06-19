@@ -1,0 +1,10 @@
+# Liard — Dataset Real seccionador_bajo_carga (Roboflow)
+
+path: C:\Users\Tomas\Documents\LAB3\CLAUDIO_AI\train-maker\dataset_real_seccionador_bajo_carga
+train: train/images
+val:   train/images
+test:  test/images
+
+nc: 1
+names:
+  0: seccionador_bajo_carga

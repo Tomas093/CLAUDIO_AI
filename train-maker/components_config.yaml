@@ -73,7 +73,7 @@ components:
   - invert
   - threshold
   sprite_variations: 90
-
+  skip_training: true
 - name: grupo_electrogeno
   dxf_path:
   - input/components/grupo_electrogeno.dxf
@@ -86,7 +86,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: celda_media_tension
   dxf_path:
   - input/components/celda_media_tension.dxf
@@ -99,7 +98,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: bornera
   dxf_path:
   - input/components/bornera.dxf
@@ -112,7 +110,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: interruptor_temporizado
   dxf_path:
   - input/components/interruptor_temporizado.dxf
@@ -125,7 +122,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: interruptor_motorizado
   dxf_path:
   - input/components/interruptor_motorizado.dxf
@@ -138,7 +134,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: puesta_a_tierra
   dxf_path:
   - input/components/puesta_a_tierra.dxf
@@ -151,7 +146,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: transformador
   dxf_path:
   - input/components/transformador.dxf
@@ -164,7 +158,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: seccionador_con_contactor
   dxf_path:
   - input/components/seccionador_con_contactor.dxf
@@ -177,7 +170,6 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
 - name: seccionador_bajo_carga_con_fusible
   dxf_path:
   - input/components/seccionador_bajo_carga_con_fusible.dxf
@@ -190,4 +182,77 @@ components:
   - threshold
   sprite_variations: 20
   skip_training: true
-
+- name: tablero_de_transferencia_automatica
+  dxf_path:
+  - input/components/tablero_de_transferencia_automatica.dxf
+  images_to_generate: 5000
+  line_thickness_range:
+  - 5
+  - 50
+  polarity_filters:
+  - invert
+  - threshold
+  sprite_variations: 20
+  skip_training: false
+  roboflow_zip_path: ../zips_datasets/tablero_de_transferencia_automatica.yolov11.zip
+- name: conmutador
+  dxf_path:
+  - input/components/conmutador.dxf
+  images_to_generate: 300
+  line_thickness_range:
+  - 5
+  - 50
+  polarity_filters:
+  - invert
+  - threshold
+  sprite_variations: 20
+  skip_training: true
+- name: fotocelula
+  dxf_path:
+  - input/components/fotocelula.dxf
+  images_to_generate: 300
+  line_thickness_range:
+  - 5
+  - 50
+  polarity_filters:
+  - invert
+  - threshold
+  sprite_variations: 20
+  skip_training: true
+- name: caja_de_toma
+  dxf_path:
+  - input/components/caja_de_toma.dxf
+  images_to_generate: 300
+  line_thickness_range:
+  - 5
+  - 50
+  polarity_filters:
+  - invert
+  - threshold
+  sprite_variations: 20
+  skip_training: true
+- name: instrumento_de_medicion_multifuncion
+  dxf_path:
+  - input/components/instrumento_de_medicion_multifuncion.dxf
+  roboflow_zip_path: ../zips_datasets/instrumento_de_medicion_multifuncion.yolov11.zip
+  images_to_generate: 300
+  line_thickness_range:
+  - 10
+  - 50
+  polarity_filters:
+  - invert
+  - threshold
+  sprite_variations: 90
+  skip_training: true
+- name: cruzconector
+  dxf_path:
+  - input/components/cruzconector.dxf
+  images_to_generate: 300
+  line_thickness_range:
+  - 5
+  - 50
+  polarity_filters:
+  - invert
+  - threshold
+  sprite_variations: 20
+  skip_training: true

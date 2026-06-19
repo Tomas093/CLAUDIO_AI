@@ -12,8 +12,11 @@
 *.txt
 /train-maker/input/
 /train-maker/output/
-/pipeline_out
-/pipeline_out_plano3
+/train-maker/inout/
+/train-maker/outputs/
+/pipeline_out/
+/pipeline-out/
+/pipeline_out_plano3/
 
 
 

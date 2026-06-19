@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\Tomas\\Documents\\LAB3\\CLAUDIO_AI\\interruptor_termomagnetico.dxf",
+  "image_path": "C:\\Users\\Tomas\\Documents\\LAB3\\CLAUDIO_AI\\scratch\\verify_mono.png",
+  "px_per_cad": 5.977270577791622,
+  "x_min_cad": 2198.7289251732036,
+  "y_min_cad": 1676.0513249158776,
+  "x_max_cad": 2211.642107216084,
+  "y_max_cad": 1697.4657812859105,
+  "image_width_px": 77,
+  "image_height_px": 128,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 10.707228185016447
+  },
+  "capas_incluir": null,
+  "modo_color": "mono"
+}
