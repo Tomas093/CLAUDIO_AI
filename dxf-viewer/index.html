@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DXF Viewer - Coordinate Extractor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app">
+      <div id="dxf-canvas"></div>
+      
+      <div id="selection-box" class="hidden"></div>
+      
+      <div id="ui-panel" class="glass-panel">
+        <header>
+          <h1>DXF Extractor</h1>
+          <p>Load a DXF file to get started</p>
+        </header>
+
+        <div class="controls">
+          <label for="file-upload" class="btn btn-primary">
+            Upload DXF
+            <input type="file" id="file-upload" accept=".dxf" class="hidden-input" />
+          </label>
+          <button id="toggle-mode" class="btn btn-secondary" disabled>
+            <span class="icon">🔍</span>
+            <span class="text">Enable Selection Mode</span>
+          </button>
+        </div>
+
+        <div id="zone-management" class="hidden">
+          <h3>Zone Management</h3>
+          <div class="zone-input-group">
+            <input type="text" id="zone-name" placeholder="Enter zone name (e.g. Living Room)" class="input-text" />
+            <button id="save-zone-btn" class="btn btn-primary">Save Zone</button>
+          </div>
+          <ul id="saved-zones-list" class="zone-list"></ul>
+          <button id="run-detections-btn" class="btn btn-action hidden" style="margin-top: 10px; width: 100%;">
+            <span class="icon">🚀</span> Run Detections
+          </button>
+        </div>
+
+        <div id="bom-dashboard" class="hidden">
+          <h3 id="bom-title">Global BOM</h3>
+          <p id="bom-subtitle" style="font-size: 0.85em; color: #94a3b8; margin-bottom: 10px;">Click a zone on canvas to view isolated BOM.</p>
+          <ul id="bom-list" class="bom-list"></ul>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
