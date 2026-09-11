@@ -1,0 +1,11 @@
+# Liard — dataset real 'tablero_de_transferencia_automatica' (Roboflow)
+# Origen: tablero_de_transferencia_automatica.yolov11.zip
+
+path: C:\Users\Tomas\Documents\LAB3\CLAUDIO_AI\train-maker\dataset_real_tablero_de_transferencia_automatica
+train: train/images
+val:   val/images
+test:  test/images
+
+nc: 1
+names:
+  0: tablero_de_transferencia_automatica

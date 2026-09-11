@@ -1,6 +1,15 @@
-# phase1_extractor.py — Sprite extraction from DXF with per-component naming
-# Phase 2 requirements: idempotent (wipes target dir before start),
-# component-prefixed filenames, incremental disk writes (no mass RAM).
+# phase1_extractor.py — Extracción de sprites desde DXF.
+#
+# Cambios respecto de la versión anterior (auditoría H13, H15, H4):
+#   * Canal alfa CONTINUO en vez de umbralizado. Antes el sprite salía en
+#     negro puro con bordes escalonados, mientras que el render de inferencia
+#     sale antialiaseado: un gap de textura que el modelo aprende enseguida.
+#   * Interpolación lineal al reescalar y sin re-binarizar después.
+#   * Los kernels de dilatación se deduplican y se reporta cuántos grosores
+#     efectivos quedaron. Antes `sprite_variations: 20` podía producir un
+#     único sprite repetido 20 veces.
+#   * El padding pasó a 0: el margen transparente se calcula a partir del
+#     kernel de dilatación de cada variante, que es lo único que lo necesita.
 from __future__ import annotations
 
 import io
@@ -12,262 +21,235 @@ import ezdxf
 import matplotlib
 import numpy as np
 from PIL import Image
+from ezdxf import bbox as ezdxf_bbox
 from ezdxf.addons.drawing import Frontend, RenderContext
+from ezdxf.addons.drawing.config import Configuration
 from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from config import (
-    BINARIZE_THRESHOLD,
-    DILATION_KERNEL_MAX,
-    DILATION_KERNEL_MIN,
-    DXF_FILE,
-    N_SPRITE_VARIATIONS,
-    RENDER_DPI,
-    SPRITES_DIR,
-)
+# Lado mayor del sprite base, en píxeles, antes de dilatar.
+BASE_SPRITE_PX = 1200
 
 
-def _forzar_color_negro(doc):
-    """Setea color 7 (negro) a TODAS las capas y entidades."""
-    for layer in doc.layers:
-        try:
-            layer.color = 7
-        except Exception:
-            pass
-    for entity in doc.modelspace():
-        try:
-            if hasattr(entity.dxf, "color"):
-                entity.dxf.color = 256
-        except Exception:
-            pass
+def _force_black_recursive(doc) -> None:
+    """Fuerza todas las entidades a negro puro, también dentro de los bloques.
 
-def _force_black_recursive(doc):
-    """Force ALL entities to true black (RGB 0,0,0), including those inside blocks.
-    
-    DXF color 7 is 'adaptive' — it shows as white on white backgrounds in
-    ezdxf's matplotlib renderer.  We bypass this by setting true_color (RGB
-    override) to pure black on every entity in modelspace AND inside every
-    block definition.  We also set all layers to color 250 (dark gray close
-    to black) as a fallback for BYLAYER entities that somehow miss the
-    true_color override.
+    El color 7 del DXF es "adaptativo" y se renderiza blanco sobre fondo
+    blanco; true_color es un override RGB que ezdxf siempre respeta.
     """
-    # Set all layers to a very dark color (250 = dark gray in ACI)
     for layer in doc.layers:
         try:
             layer.color = 250
         except Exception:
             pass
 
-    def _force_entity_black(entity):
+    def _black(entity):
         try:
-            # true_color is an RGB override that ezdxf always respects
-            entity.dxf.true_color = 0x000000  # Pure black RGB
+            entity.dxf.true_color = 0x000000
         except Exception:
             pass
 
-    # Force entities in modelspace
     for entity in doc.modelspace():
-        _force_entity_black(entity)
-
-    # Force entities inside ALL block definitions
+        _black(entity)
     for block in doc.blocks:
         for entity in block:
-            _force_entity_black(entity)
+            _black(entity)
 
 
-def render_dxf_to_rgba(dxf_path: Path, dpi: int = RENDER_DPI) -> np.ndarray:
-    """Render a DXF file to an RGBA numpy array with transparent background.
-    
-    Renders the DXF directly using ezdxf + matplotlib with:
-    - target_px=1000 so the symbol is large enough for sprite extraction
-    - true_color override on ALL entities (including block internals) to
-      guarantee black lines regardless of background color
-    - White background → threshold to extract alpha mask
+def render_dxf_to_rgba(dxf_path: Path, target_px: int = BASE_SPRITE_PX) -> np.ndarray:
+    """Renderiza un DXF a RGBA con fondo transparente y alfa continuo.
+
+    El alfa se deriva del gris del render (``255 - gris``), así que conserva
+    el antialiasing de matplotlib en vez de convertirlo en un borde duro.
     """
     doc = ezdxf.readfile(str(dxf_path))
     msp = doc.modelspace()
-
-    # Force all entities to pure black via true_color RGB override
     _force_black_recursive(doc)
 
-    # Calculate bounding box and image size
-    from ezdxf import bbox as ezdxf_bbox
     bb = ezdxf_bbox.extents(msp)
     if not bb.has_data:
-        raise RuntimeError(f"ModelSpace vacio o sin bbox en {dxf_path}")
+        raise RuntimeError(f"ModelSpace vacío o sin bbox en {dxf_path}")
 
     x_min, y_min = bb.extmin.x, bb.extmin.y
     x_max, y_max = bb.extmax.x, bb.extmax.y
-    ancho_cad = x_max - x_min
-    alto_cad = y_max - y_min
-
-    # Scale: largest side of the symbol → ~1000 px
-    target_px = 1000
+    ancho_cad, alto_cad = x_max - x_min, y_max - y_min
     max_cad = max(ancho_cad, alto_cad)
     if max_cad <= 0:
         raise RuntimeError(f"BBox degenerado en {dxf_path}")
+
     px_per_cad = target_px / max_cad
+    ancho_px = max(1, int(round(ancho_cad * px_per_cad)))
+    alto_px = max(1, int(round(alto_cad * px_per_cad)))
 
-    ancho_px = int(round(ancho_cad * px_per_cad))
-    alto_px = int(round(alto_cad * px_per_cad))
-    pad_px = 32
+    pad_px = 8
     pad_cad = pad_px / px_per_cad
+    dpi = 100
+    fig = plt.figure(
+        figsize=((ancho_px + 2 * pad_px) / dpi, (alto_px + 2 * pad_px) / dpi), dpi=dpi
+    )
+    try:
+        fig.patch.set_facecolor("white")
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.set_xlim(x_min - pad_cad, x_max + pad_cad)
+        ax.set_ylim(y_min - pad_cad, y_max + pad_cad)
+        ax.set_facecolor("white")
+        ax.axis("off")
 
-    fig_w = (ancho_px + 2 * pad_px) / 100.0
-    fig_h = (alto_px + 2 * pad_px) / 100.0
+        ctx = RenderContext(doc)
+        backend = MatplotlibBackend(ax)
+        Frontend(ctx, backend, config=Configuration.defaults()).draw_layout(
+            msp, finalize=False
+        )
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
-    fig.patch.set_facecolor("white")
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(x_min - pad_cad, x_max + pad_cad)
-    ax.set_ylim(y_min - pad_cad, y_max + pad_cad)
-    ax.axis("off")
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=dpi, facecolor="white", edgecolor="none")
+        buf.seek(0)
+        img_bgr = cv2.imdecode(np.frombuffer(buf.read(), np.uint8), cv2.IMREAD_COLOR)
+        buf.close()
+    finally:
+        plt.close(fig)
 
-    ctx = RenderContext(doc)
-    from ezdxf.addons.drawing.config import Configuration
-    config = Configuration.defaults()
-    backend = MatplotlibBackend(ax)
-    Frontend(ctx, backend, config=config).draw_layout(msp, finalize=False)
+    if img_bgr is None:
+        raise RuntimeError(f"El render de {dxf_path.name} no produjo imagen")
 
-    # Render to in-memory buffer (avoid temp file)
-    buf = io.BytesIO()
-    plt.savefig(buf, dpi=100, format="png", facecolor="white", edgecolor="none")
-    plt.close(fig)
-    buf.seek(0)
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-    # Decode from buffer
-    img_pil = Image.open(buf)
-    img_bgr = cv2.cvtColor(np.array(img_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
-    buf.close()
+    # Alfa continuo: conserva el antialiasing en vez de destruirlo con un
+    # threshold. Un píxel blanco (255) queda transparente, uno negro opaco.
+    alpha = (255 - gray).astype(np.uint8)
 
-    # Convert to RGBA with transparent background
-    img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, alpha = cv2.threshold(img_gray, 250, 255, cv2.THRESH_BINARY_INV)
+    rgba = np.zeros((*gray.shape, 4), dtype=np.uint8)
+    rgba[:, :, 0:3] = 0          # trazo negro
+    rgba[:, :, 3] = alpha
 
-    # Sanity check
-    nonzero = np.count_nonzero(alpha)
-    total = alpha.shape[0] * alpha.shape[1]
-    print(f"[Fase 1] Render {dxf_path.name}: {img_bgr.shape[1]}x{img_bgr.shape[0]} px, "
-          f"alpha nonzero: {nonzero}/{total} ({nonzero/total*100:.1f}%)")
-    if nonzero == 0:
-        print(f"[Fase 1] WARNING: No se detecto contenido visible en {dxf_path.name}!")
-
-    rgba_img = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2RGBA)
-    rgba_img[:, :, 0:3] = 0  # Black color
-    rgba_img[:, :, 3] = alpha
-
-    return rgba_img
+    ink = float(np.count_nonzero(alpha > 8)) / alpha.size * 100.0
+    print(f"[Fase 1] {dxf_path.name}: {img_bgr.shape[1]}x{img_bgr.shape[0]}px, "
+          f"tinta {ink:.1f}%")
+    if ink < 0.05:
+        raise RuntimeError(
+            f"{dxf_path.name} renderizó prácticamente vacío ({ink:.3f}% de tinta). "
+            f"Revisá el DXF antes de generar sprites."
+        )
+    return rgba
 
 
-def crop_to_content(rgba: np.ndarray, padding: int = 75) -> np.ndarray:
-    """Crop an RGBA image to its non-transparent bounding box + padding."""
+def crop_to_content(rgba: np.ndarray, padding: int = 0) -> np.ndarray:
+    """Recorta al bounding box del contenido no transparente."""
     alpha = rgba[:, :, 3]
     rows = np.any(alpha > 0, axis=1)
     cols = np.any(alpha > 0, axis=0)
-
     if not rows.any():
         return rgba
 
     rmin, rmax = np.where(rows)[0][[0, -1]]
     cmin, cmax = np.where(cols)[0][[0, -1]]
-
     rmin = max(0, rmin - padding)
     rmax = min(rgba.shape[0] - 1, rmax + padding)
     cmin = max(0, cmin - padding)
     cmax = min(rgba.shape[1] - 1, cmax + padding)
+    return rgba[rmin:rmax + 1, cmin:cmax + 1]
 
-    return rgba[rmin : rmax + 1, cmin : cmax + 1]
+
+def alpha_bbox(rgba: np.ndarray, threshold: int = 8) -> tuple[int, int, int, int] | None:
+    """Bounding box (x, y, w, h) del contenido visible según el canal alfa.
+
+    Es la única fuente de verdad para la caja YOLO: usar ``shape`` incluye el
+    padding transparente y las bandas que agrega la rotación (ver H4).
+    """
+    alpha = rgba[:, :, 3]
+    rows = np.any(alpha > threshold, axis=1)
+    cols = np.any(alpha > threshold, axis=0)
+    if not rows.any() or not cols.any():
+        return None
+    r0, r1 = np.where(rows)[0][[0, -1]]
+    c0, c1 = np.where(cols)[0][[0, -1]]
+    return int(c0), int(r0), int(c1 - c0 + 1), int(r1 - r0 + 1)
 
 
 def apply_dilation(rgba: np.ndarray, kernel_size: int) -> np.ndarray:
-    """Dilate the alpha channel to simulate thicker drawing lines."""
+    """Engrosa el trazo dilatando el canal alfa.
+
+    Se agrega un borde del tamaño del kernel para que la dilatación no quede
+    recortada contra el límite de la imagen.
+    """
     if kernel_size <= 1:
         return rgba.copy()
-
     if kernel_size % 2 == 0:
         kernel_size += 1
 
-    result = rgba.copy()
+    pad = kernel_size // 2 + 1
+    padded = cv2.copyMakeBorder(
+        rgba, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0, 0)
+    )
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-    result[:, :, 3] = cv2.dilate(rgba[:, :, 3], kernel)
-    return result
+    padded[:, :, 3] = cv2.dilate(padded[:, :, 3], kernel)
+    return padded
+
+
+def _effective_kernels(kernel_min: int, kernel_max: int, n_variations: int,
+                       min_dim: int) -> list[int]:
+    """Kernels de dilatación realmente distintos, dentro de un techo sensato.
+
+    El techo evita que un kernel enorme convierta el símbolo en una mancha;
+    la deduplicación evita generar el mismo sprite N veces (ver H15).
+    """
+    dynamic_max = min(kernel_max, max(kernel_min + 1, int(min_dim * 0.03)))
+    if n_variations <= 1:
+        return [kernel_min]
+    span = dynamic_max - kernel_min
+    raw = [
+        int(round(kernel_min + span * i / (n_variations - 1)))
+        for i in range(n_variations)
+    ]
+    return sorted(set(raw))
 
 
 def generate_sprite_variations(
-    dxf_path: Path = DXF_FILE,
-    output_dir: Path = SPRITES_DIR,
-    n_variations: int = N_SPRITE_VARIATIONS,
-    kernel_min: int = DILATION_KERNEL_MIN,
-    kernel_max: int = DILATION_KERNEL_MAX,
-    dpi: int = RENDER_DPI,
+    dxf_path: Path,
+    output_dir: Path,
+    n_variations: int,
+    kernel_min: int,
+    kernel_max: int,
     component_name: str = "",
+    target_px: int = BASE_SPRITE_PX,
 ) -> list[Path]:
-    """Generate *n_variations* sprite PNGs with incremental line thickness.
+    """Genera los PNG de sprite con distintos grosores de línea.
 
-    **Idempotency**: wipes *output_dir* before generating to avoid duplicates
-    if the process was previously interrupted.
-
-    **Memory**: each sprite is written to disk immediately after creation —
-    no list of images is held in RAM.
-
-    **Naming**: files are prefixed with *component_name* when provided,
-    e.g. ``interruptor_termomagnetico_sprite_001_k5.png``.
+    Idempotente: borra *output_dir* antes de escribir.
     """
-
-    # ── Idempotency: clean slate ──────────────────────────────────────────
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     prefix = f"{component_name}_" if component_name else ""
 
-    print(f"[Fase 1] Renderizando DXF base: {dxf_path.name}...")
-    base_rgba = render_dxf_to_rgba(dxf_path, dpi=dpi)
-    base_rgba = crop_to_content(base_rgba)
-    
-    # Redimensionar si excede el tamaño máximo para asegurar cabida en tiles de 640x640
-    # O si es muy pequeña, ampliarla para que la dilatación no destruya los detalles.
+    base_rgba = render_dxf_to_rgba(dxf_path, target_px=target_px)
+    base_rgba = crop_to_content(base_rgba, padding=0)
+
     h_base, w_base = base_rgba.shape[:2]
-    max_dim = max(h_base, w_base)
-    
-    # Target dimension around 1500 to allow smooth dilation
-    scale_f = 1500.0 / max_dim
-    new_w = int(w_base * scale_f)
-    new_h = int(h_base * scale_f)
-    
-    # We use INTER_NEAREST for upscaling to avoid jagged edges which become huge when dilated
-    interpolation = cv2.INTER_AREA if scale_f < 1.0 else cv2.INTER_NEAREST
+    scale_f = target_px / max(h_base, w_base)
+    new_w = max(1, int(round(w_base * scale_f)))
+    new_h = max(1, int(round(h_base * scale_f)))
+    interpolation = cv2.INTER_AREA if scale_f < 1.0 else cv2.INTER_LINEAR
     base_rgba = cv2.resize(base_rgba, (new_w, new_h), interpolation=interpolation)
-    print(f"[Fase 1] Sprite redimensionado de {w_base}x{h_base} px a {new_w}x{new_h} px para dilatación óptima")
-    
-    # Re-threshold the alpha mask after resizing to keep it binary
-    _, alpha = cv2.threshold(base_rgba[:, :, 3], 127, 255, cv2.THRESH_BINARY)
-    base_rgba[:, :, 3] = alpha
-        
-    print(f"[Fase 1] Tamaño del sprite base: {base_rgba.shape[1]}x{base_rgba.shape[0]} px")
+    # Nada de re-binarizar acá: eso volvía a destruir el antialiasing.
 
-    # Dynamically adjust kernel_max based on the image size so it doesn't destroy details
-    # We cap it at 3% of the minimum dimension, or the original kernel_max, whichever is smaller.
-    min_dim = min(new_w if 'new_w' in locals() else w_base, new_h if 'new_h' in locals() else h_base)
-    dynamic_kernel_max = min(kernel_max, max(3, int(min_dim * 0.03)))
-
-    kernels = [
-        int(kernel_min + (dynamic_kernel_max - kernel_min) * i / max(n_variations - 1, 1))
-        for i in range(n_variations)
-    ]
+    kernels = _effective_kernels(kernel_min, kernel_max, n_variations, min(new_w, new_h))
+    if len(kernels) < n_variations:
+        print(f"[Fase 1] {component_name}: {len(kernels)} grosores efectivos de "
+              f"{n_variations} pedidos (kernels {kernels[0]}–{kernels[-1]}); "
+              f"el resto salían duplicados.")
 
     generated: list[Path] = []
     for i, k in enumerate(kernels):
         sprite = apply_dilation(base_rgba, k)
+        sprite = crop_to_content(sprite, padding=0)
         out_path = output_dir / f"{prefix}sprite_{i:04d}_k{k:02d}.png"
-        # Incremental write — sprite is freed at end of loop iteration
         Image.fromarray(sprite).save(out_path, format="PNG")
         generated.append(out_path)
 
-        if (i + 1) % 50 == 0 or (i + 1) == n_variations:
-            print(f"  [{i + 1:3d}/{n_variations}] {out_path.name}  (kernel={k})")
-
-    print(f"[Fase 1] ✅ {len(generated)} sprites guardados en '{output_dir}'\n")
+    print(f"[Fase 1] {len(generated)} sprites en '{output_dir.name}' "
+          f"({base_rgba.shape[1]}x{base_rgba.shape[0]}px base)\n")
     return generated

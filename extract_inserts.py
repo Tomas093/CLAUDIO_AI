@@ -1,3 +1,4 @@
+import typing
 """
 extract_inserts.py
 -------------------
@@ -136,7 +137,7 @@ def collect_inserts(doc, msp, depth_max: int = 1, filter_text: str = None):
 # Recorte de tiles
 # ---------------------------------------------------------------------------
 
-def crop_tile(image: np.ndarray, cx: int, cy: int, tile_size: int) -> np.ndarray | None:
+def crop_tile(image: np.ndarray, cx: int, cy: int, tile_size: int) -> typing.Optional[np.ndarray]:
     """
     Recorta un tile centrado en (cx, cy). Devuelve None si el centro está
     completamente fuera de la imagen.

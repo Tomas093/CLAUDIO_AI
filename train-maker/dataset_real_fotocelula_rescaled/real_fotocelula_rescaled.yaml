@@ -1,0 +1,11 @@
+# Liard - dataset real rescalado 'fotocelula'
+# Rescalado para alinear tamaño del símbolo con los tiles de inferencia (~12% del tile)
+
+path: C:\Users\Tomas\Documents\LAB3\CLAUDIO_AI\train-maker\dataset_real_fotocelula_rescaled
+train: train/images
+val:   val/images
+test:  test/images
+
+nc: 1
+names:
+  0: fotocelula

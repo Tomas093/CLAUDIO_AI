@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\Tomas\\Documents\\LAB3\\CLAUDIO_AI\\dxf\\jijiji.dxf",
+  "image_path": "C:\\Users\\Tomas\\Documents\\LAB3\\CLAUDIO_AI\\dxf\\jijiji.png",
+  "px_per_cad": 61.638104869049194,
+  "x_min_cad": 3333.1839525812347,
+  "y_min_cad": 1174.5585900983444,
+  "x_max_cad": 3853.378727360177,
+  "y_max_cad": 1622.3784150537992,
+  "image_width_px": 32064,
+  "image_height_px": 27603,
+  "scale_reference": {
+    "tipo": "TEXT_correccion",
+    "valor_cad": 0.1799999999999998
+  },
+  "capas_incluir": null,
+  "modo_color": "color"
+}

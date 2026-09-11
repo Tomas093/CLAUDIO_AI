@@ -1,0 +1,17 @@
+{
+  "dxf_path": "C:\\Users\\Tomas\\Documents\\LAB3\\CLAUDIO_AI\\test1.dxf",
+  "image_path": "C:\\Users\\Tomas\\Documents\\LAB3\\CLAUDIO_AI\\evaluation_test1\\test1_render.png",
+  "px_per_cad": 84.30570978015794,
+  "x_min_cad": 1876.9856187271253,
+  "y_min_cad": 1849.5685266752444,
+  "x_max_cad": 1938.8426267666466,
+  "y_max_cad": 1884.5635495440356,
+  "image_width_px": 5215,
+  "image_height_px": 2950,
+  "scale_reference": {
+    "tipo": "INSERT_diag",
+    "valor_cad": 1.1861592798491074
+  },
+  "capas_incluir": null,
+  "modo_color": "color"
+}
