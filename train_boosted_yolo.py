@@ -61,20 +61,18 @@ def main():
     device = 0 if torch.cuda.is_available() else 'cpu'
     print(f'Dispositivo: cuda:{device} ({torch.cuda.get_device_name(0)})')
 
-    # Partir del checkpoint base limpio de 21:36
-    start_weights = 'train-maker/models/best_componente_nano_prev35ep.pt'
-    if not os.path.exists(start_weights):
-        start_weights = 'train-maker/models/best_componente_nano.pt'
+    # Partir del checkpoint optimo actual
+    start_weights = 'train-maker/models/best_componente_nano.pt'
     print(f'Cargando pesos iniciales: {start_weights}')
     model = YOLO(start_weights)
 
     project_dir = Path('yolo_workspace').resolve()
     run_name = 'boosted_componente_yolo11n'
 
-    # Hiperparámetros restaurados del camino bueno de 21:36 (sin flips, sin corte temprano)
+    # Hiperparámetros de fine-tuning suave sobre las muestras objetivo
     train_results = model.train(
         data=str(yaml_path),
-        epochs=20,
+        epochs=12,
         imgsz=640,
         batch=32,
         workers=2,
@@ -82,20 +80,20 @@ def main():
         project=str(project_dir),
         name=run_name,
         exist_ok=True,
-        patience=25,          # Evita corte temprano en la epoca 5
+        patience=15,
         optimizer='AdamW',
-        lr0=0.001,           # Fine-tuning rate suave
-        lrf=0.01,
+        lr0=0.0005,          # Fine-tuning rate muy suave
+        lrf=0.05,
         cos_lr=True,
-        translate=0.20,       # Invarianza espacial cerca de bordes
-        scale=0.20,          # Escala moderada sin distorsion
+        translate=0.15,      # Invarianza espacial cerca de bordes
+        scale=0.15,          # Escala moderada sin distorsion
         degrees=0.0,         # Cero rotacion para evitar aliasing en 1px
         flipud=0.0,          # Desactivado: orientacion fija en CAD
         fliplr=0.0,          # Desactivado: cero flip horizontal para evitar corrimiento
-        mosaic=0.5,          # Mosaico moderado inicial
+        mosaic=0.3,          # Mosaico leve inicial
         mixup=0.0,           # Desactivado: evitar lineas fantasma
         copy_paste=0.0,
-        close_mosaic=10,     # Ultimas 10 epocas en tiles 100% reales sin mosaico
+        close_mosaic=6,      # Ultimas 6 epocas en tiles 100% reales sin mosaico
         hsv_h=0.01,
         hsv_s=0.2,
         hsv_v=0.2,

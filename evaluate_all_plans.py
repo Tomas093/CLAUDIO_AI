@@ -54,14 +54,14 @@ def slice_coords(H, W, slice_size=640, overlap=0.80):
 
 def evaluate_dxf(dxf_path, gt_csv_path, model, out_dir, px_per_cad_default=75.0,
                  is_industrial=False, conf_sweep=[0.02, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50],
-                 dist_tol=1.0, batch_size=32, device='cuda:0'):
+                 dist_tol=1.0, batch_size=32, device='cuda:0', force_render=False):
     os.makedirs(out_dir, exist_ok=True)
     dxf_stem = Path(dxf_path).stem
     render_path = os.path.join(out_dir, f"{dxf_stem}_render.png")
     meta_path = os.path.join(out_dir, f"{dxf_stem}_meta.json")
 
     # Renderizado inteligente
-    if not os.path.exists(render_path) or not os.path.exists(meta_path):
+    if force_render or not os.path.exists(render_path) or not os.path.exists(meta_path):
         print(f"\n[Render] Renderizando {dxf_path}...")
         doc = ezdxf.readfile(dxf_path)
         msp = doc.modelspace()
@@ -349,9 +349,19 @@ def main():
             'scale': 75.0,
             'is_ind': True,
             'dist_tol': 1.2
+        },
+        {
+            'name': 'TSSS_2 (Industrial Schneider - 206 Componentes con BORNES)',
+            'dxf': 'TSSS_2 (1).dxf',
+            'gt': 'dxf/tsss_2_gt_completo.csv',
+            'out': 'evaluation_tsss_2',
+            'scale': 75.0,
+            'is_ind': True,
+            'dist_tol': 1.0
         }
     ]
 
+    force_render = '--force-render' in sys.argv
     all_summaries = {}
     for p in plans:
         print('\n' + '=' * 80)
@@ -366,7 +376,8 @@ def main():
             px_per_cad_default=p['scale'],
             is_industrial=p['is_ind'],
             dist_tol=p['dist_tol'],
-            device=device
+            device=device,
+            force_render=force_render
         )
         all_summaries[p['name']] = res_conf
 
