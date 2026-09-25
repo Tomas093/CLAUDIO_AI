@@ -18,13 +18,16 @@
 /pipeline-out/
 /pipeline_out_plano3/
 
-
+*.elmt
 
 # Directorios de datos
 dataset/
 datasets/
 data/
 __pycache__/
+_para_borrar/
+_A_BORRAR/
+ErrorReports/
 
 # Archivos de Python
 *.py[cod]
