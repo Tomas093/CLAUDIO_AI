@@ -83,3 +83,48 @@ results/
 /.idea/modules.xml
 /.idea/inspectionProfiles/profiles_settings.xml
 /.idea/vcs.xml
+
+# Agentes / notas de sesión
+.agents/
+Claude outputs/
+
+# Binarios, documentos y comprimidos
+*.pdf
+*.zip
+*.7z
+*.rar
+*.exe
+*.dwg
+*.dwl
+*.dwl2
+*.bak
+*.orig
+*.map
+*.cache
+*.qet
+
+# Pesos de modelos
+*.pt
+*.pth
+*.onnx
+
+# Entornos y trabajo local
+claudio_v2/venv_rfdetr/
+claudio_v2/work/
+zips_datasets/
+yolo_workspace/
+
+# Librerías de símbolos y salidas de evaluación (generadas)
+Base de simbolols/
+simbolos_cad_limpios/
+simbolos_unifilares_limpios/
+output_eval*/
+eval_*/
+resultados_*/
+revision_ia/
+revision_gt/
+audit_*/
+
+# Marcadores de cadenas y paquetes de entrega generados
+.aviso_*
+claudio_v2/entrega_pipeline/
