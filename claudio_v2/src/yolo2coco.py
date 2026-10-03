@@ -31,10 +31,12 @@ def convertir(ds, out):
                     p = ln.split()
                     if len(p) < 5: continue
                     cx, cy, w, h = float(p[1]) * W, float(p[2]) * H, float(p[3]) * W, float(p[4]) * H
-                    anns.append(dict(id=len(anns), image_id=k, category_id=1, iscrowd=0, area=w * h,
+                    anns.append(dict(id=len(anns), image_id=k, category_id=1 + int(float(p[0])), iscrowd=0, area=w * h,   # 30/09: clase yolo k -> k+1
                                      bbox=[cx - w / 2, cy - h / 2, w, h]))
         cats = [dict(id=0, name='componentes', supercategory='none'),
                 dict(id=1, name='componente', supercategory='componentes')]
+        if any(a['category_id'] == 2 for a in anns):   # 30/09 ds23: clase auxiliar de negativos duros
+            cats.append(dict(id=2, name='no_componente', supercategory='componentes'))
         # 28/09: escritura atomica (.tmp + replace): un corte de luz a mitad no deja un json truncado
         fj = os.path.join(d, '_annotations.coco.json')
         with open(fj + '.tmp', 'w') as h:

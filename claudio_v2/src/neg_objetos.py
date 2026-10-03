@@ -93,15 +93,46 @@ def rotulo(img, r, txt_h):
 GENS = [(pat_cuadrado, 3), (pat_suelta, 2), (flecha, 2), (rotulo, 1)]
 
 
-def agregar(img, r, txt_h, n):
-    """Dibuja hasta n negativos de objeto en lugares en blanco. Devuelve [(caja, tipo)]."""
-    tot = sum(p for _, p in GENS); out = []
-    for _ in range(n * 4):
+def _pisa(b, evitar, m):
+    return any(b[0] - m < q[2] and b[2] + m > q[0] and b[1] - m < q[3] and b[3] + m > q[1] for q in evitar)
+
+
+def agregar(img, r, txt_h, n, evitar=(), gens=None):
+    """Dibuja hasta n negativos de objeto en lugares en blanco que NO pisen ninguna caja de `evitar` (las cajas
+    de los componentes del tile; 30/09, Tomas: un rotulo quedaba encima de la caja del medidor Wh).
+    Se dibuja en una copia y solo se pega si la caja final esta libre. Devuelve [(caja, tipo)]."""
+    G = gens or GENS
+    tot = sum(p for _, p in G); out = []; ocup = [list(q[:4]) for q in evitar]
+    m = int(txt_h * .6) + 4
+    for _ in range(n * 6):
         if len(out) >= n: break
         k = r.random() * tot
-        for g, p in GENS:
+        for g, p in G:
             k -= p
             if k <= 0: break
-        b = g(img, r, txt_h)
-        if b is not None: out.append((b, g.__name__))
+        tmp = img.copy(); b = g(tmp, r, txt_h)
+        if b is None: continue
+        dib = np.where((tmp != img).any(-1) if tmp.ndim == 3 else tmp != img)
+        if len(dib[0]):
+            tb = [int(dib[1].min()), int(dib[0].min()), int(dib[1].max()) + 1, int(dib[0].max()) + 1]
+            if _pisa(tb, ocup, m): continue
+        img[:] = tmp; out.append((b, g.__name__)); ocup.append(list(b))
     return out
+
+
+def ensuciar(img, r, txt_h, boxes):
+    """v5 (30/09): suciedad ENCIMA de los componentes, que siguen siendo positivos. Con el v4 como veto, el
+    verificador rechazaba (p < 0,001) interruptores cruzados por circulos grandes o con un rotulo corto pegado
+    ("Q6", "K1"): habia aprendido que circulo grande = negativo. Generico: circulos grandes que cruzan el tile,
+    rotulos cortos junto a algunos componentes y alguna linea de cota."""
+    for _ in range(r.randint(1, 4)):                     # circulos grandes (burbujas, circulos de construccion)
+        R = int(txt_h * r.uniform(2.5, 10)); cx = r.randint(0, S); cy = r.randint(0, S)
+        cv2.circle(img, (cx, cy), R, int(r.uniform(0, 140)), 1)
+    for b in r.sample(list(boxes), min(len(boxes), r.randint(0, 6))):   # rotulo corto pegado al componente
+        t = r.choice(['Q%d' % r.randint(1, 30), 'K%d' % r.randint(1, 9), 'F%d' % r.randint(1, 20), 'X%d' % r.randint(1, 9),
+                      'KM%d' % r.randint(1, 5), 'ID%02d' % r.randint(1, 12)])
+        x = int(b[0] - txt_h * r.uniform(.2, 1.5)) if r.random() < .5 else int(b[2] + 2)
+        y = int(r.uniform(b[1], max(b[1] + 1, b[3] - txt_h)))
+        put_text(img, max(0, x), max(0, y), t, int(txt_h * r.uniform(.6, .9)), r, rot=r.random() < .4)
+    if r.random() < .3:                                  # linea de cota / cable que cruza
+        y = r.randint(0, S - 1); cv2.line(img, (0, y), (S, y + r.randint(-40, 40)), 0, 1)

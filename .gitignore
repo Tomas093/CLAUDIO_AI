@@ -128,3 +128,7 @@ audit_*/
 # Marcadores de cadenas y paquetes de entrega generados
 .aviso_*
 claudio_v2/entrega_pipeline/
+colab_cli/
+modelos_guardados/
+claudio_v2/pipeline_dev/
+claudio_v2/*.zip

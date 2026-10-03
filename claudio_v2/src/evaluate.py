@@ -53,7 +53,17 @@ def load_gt(name, path):
     # 30/09: GT_V8=1 = v7 de la otra sesion (sin PAT, testigos divididos, EZE/test1 reajustados) + mis AUDIT7 con la
     # revision de Tomas (TOMA = gabinete entero, BA y accesorios si, reservas recortadas, KC completo, cajas
     # corridas realineadas). Ver src/gt_v8.py. Las zonas neutras (<gt>_v8_neutras.csv) las filtra neutras().
-    if os.environ.get('GT_V8') == '1':
+    # 30/09: GT_V9=1 = GT nuevo de Tomas (Ground-Truth-Planos.zip, reemplaza a todos los anteriores) + la tabla
+    # REFERENCIAS como zona neutra (sus criterios: "cuadros de REFERENCIAS: fuera"). Neutras en <gt>_v9_neutras.csv.
+    # 03/10: GT_V10=1 = GT actualizado de Tomas del 03/10 (Ground-Truth-Planos.zip, LU 1283 / nyw 1084 / contactores test_2)
+    # + la tabla REFERENCIAS neutra (de v9). Neutras en <gt>_v10_neutras.csv.
+    if os.environ.get('GT_V10') == '1':
+        cand = path[:-4] + '_v10.csv'
+        if os.path.exists(cand): path = cand
+    elif os.environ.get('GT_V9') == '1':
+        cand = path[:-4] + '_v9.csv'
+        if os.path.exists(cand): path = cand
+    elif os.environ.get('GT_V8') == '1':
         for suf in ('_v8.csv', '_v7.csv', '_v6.csv', '_v5.csv', '_v4.csv', '_v3.csv', '_v2.csv'):
             cand = path[:-4] + suf
             if os.path.exists(cand):
@@ -106,8 +116,9 @@ def load_gt(name, path):
 
 def neutras(path):
     """Zonas neutras del GT v8 (ni TP ni FP ni FN): cajas [(x1,y1,x2,y2)]. Vacio si no hay GT_V8."""
-    p = path[:-4] + '_v8_neutras.csv'
-    if os.environ.get('GT_V8') != '1' or not os.path.exists(p): return []
+    ver = 'v10' if os.environ.get('GT_V10') == '1' else 'v9' if os.environ.get('GT_V9') == '1' else 'v8' if os.environ.get('GT_V8') == '1' else None
+    p = path[:-4] + '_%s_neutras.csv' % ver
+    if ver is None or not os.path.exists(p): return []
     return [tuple(float(r[k]) for k in ('x1', 'y1', 'x2', 'y2')) for r in csv.DictReader(open(p, encoding='utf-8'))]
 
 
@@ -115,25 +126,28 @@ def fuera_de_neutras(dets, zonas):
     """Saca las detecciones cuyo centro cae en una zona neutra (margen 20%)."""
     if not zonas: return dets
     def en(d, z):
-        mx, my = (z[2] - z[0]) * .2, (z[3] - z[1]) * .2; cx, cy = (d[0] + d[2]) / 2, (d[1] + d[3]) / 2
+        # margen 20% pero con tope: en zonas grandes (tabla REFERENCIAS) el 20% se comia componentes vecinos
+        mx, my = min((z[2] - z[0]) * .2, .1), min((z[3] - z[1]) * .2, .1); cx, cy = (d[0] + d[2]) / 2, (d[1] + d[3]) / 2
         return z[0] - mx <= cx <= z[2] + mx and z[1] - my <= cy <= z[3] + my
     return [d for d in dets if not any(en(d, z) for z in zonas)]
 
 class _Cajas:
-    def __init__(self, xyxy, conf): self.xyxy, self.conf = xyxy, conf
+    def __init__(self, xyxy, conf, cls=None): self.xyxy, self.conf, self.cls = xyxy, conf, cls
 
 
 class _Res:
     def __init__(self, det):
         import torch
-        self.boxes = _Cajas(torch.as_tensor(det.xyxy, dtype=torch.float32), torch.as_tensor(det.confidence, dtype=torch.float32))
+        self.boxes = _Cajas(torch.as_tensor(det.xyxy, dtype=torch.float32), torch.as_tensor(det.confidence, dtype=torch.float32),
+                            torch.as_tensor(det.class_id if det.class_id is not None else [0] * len(det.xyxy)))
 
 
 class RFDETRComoYOLO:
     """24/09. RF-DETR (pesos .pth, corre en venv_rfdetr) con la interfaz de `YOLO.predict` que usa
     `infer`, asi se evalua con exactamente la misma receta (tiles, 2 escalas, fusion en CAD)."""
     def __init__(self, w):
-        from rfdetr import RFDETRNano
+        import rfdetr as _rf
+        RFDETRNano = {'nano': _rf.RFDETRNano, 'small': _rf.RFDETRSmall, 'medium': _rf.RFDETRMedium}[os.environ.get('RFDETR_VAR', 'nano')]   # 01/10
         # 28/09: ruta absoluta; rfdetr 1.11 busca las relativas en ~/.roboflow/models (la eval de RF5 fallo por eso)
         self.m = RFDETRNano(pretrain_weights=os.path.abspath(w), resolution=int(os.environ.get('RFDETR_RES', '640')))
         try: self.m.optimize_for_inference()
@@ -144,6 +158,8 @@ class RFDETRComoYOLO:
         return [_Res(d) for d in (det if isinstance(det, list) else [det])]
 
 
+FUERA = {int(k) for k in os.environ.get('EVAL_CLASES_FUERA', '').split(',') if k}
+
 def infer(model, img, conf, tile=640, stride=320):
     H, W = img.shape; dets = []
     ys = list(range(0, max(1, H - tile) + 1, stride)); xs = list(range(0, max(1, W - tile) + 1, stride))
@@ -152,7 +168,11 @@ def infer(model, img, conf, tile=640, stride=320):
     batch, offs = [], []
     def run():
         for r, (ox, oy) in zip(model.predict(batch, imgsz=tile, conf=conf, verbose=False), offs):
-            for b, c in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist()):
+            # 30/09: modelos con clase auxiliar de negativos (ds23): EVAL_CLASES_FUERA = ids de clase a descartar
+            # (YOLO ds23: '1'; RF-DETR ds23: '2', por la categoria 0 'padre' de COCO). Vacio = se usan todas.
+            cl = r.boxes.cls.tolist() if getattr(r.boxes, 'cls', None) is not None else [0] * len(r.boxes.conf)
+            for b, c, k in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist(), cl):
+                if int(k) in FUERA: continue
                 dets.append([b[0]+ox, b[1]+oy, b[2]+ox, b[3]+oy, c])
         batch.clear(); offs.clear()
     for y in ys:
@@ -215,7 +235,7 @@ if __name__ == '__main__':
     conf = float(sys.argv[2]) if len(sys.argv) > 2 else 0.20
     tag = sys.argv[3] if len(sys.argv) > 3 else 'eval'
     model = RFDETRComoYOLO(w) if w.endswith('.pth') else YOLO(w); out = os.path.join(WORK, 'eval', tag); os.makedirs(out, exist_ok=True); resumen = {}
-    for name, dxf, gtp in PLANOS:
+    for name, dxf, gtp in [q for q in PLANOS if not os.environ.get("EVAL_SOLO") or q[0] == os.environ["EVAL_SOLO"]]:   # 30/09: EVAL_SOLO=<plano>
         doc = ezdxf.readfile(os.path.join(BASE, dxf)); ppc = auto_ppc(doc)
         dc = []; dets = []
         for k, sc in enumerate(SCALES):   # multi-escala: el render a 1.6x agranda simbolos chicos (borneras) -> mucho mas recall

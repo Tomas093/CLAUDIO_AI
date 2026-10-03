@@ -16,6 +16,7 @@ v8 = base de la otra sesion + mis AUDIT7 con la revision de Tomas del 30/09:
     la altura del interruptor termomagnetico vecino de la misma fila.
   - KC (contactor de barra normal, fl_un_02): la caja AUDIT-contactor solo cubria la bobina; pasa a cubrir
     bobina + contacto con sus dos bornes (union con el bloque A$C40E17AD0).
+  - tabla REFERENCIAS (leyenda) entera como zona neutra (Tomas 30/09).
 Salida: <gt>_v8.csv y <gt>_v8_neutras.csv al lado de cada GT.
 
     py -3 src/gt_v8.py            # informa
@@ -150,6 +151,15 @@ def main(aplicar):
                     if f['block_name'].startswith('AUDIT7'): f.update(fila(f['block_name'], r))
                 continue
             filas.append(fila('V8-' + t, r)); tot['acc_' + t] += 1
+        # 30/09 (Tomas: "es una tabla de referencias"): la tabla REFERENCIAS (leyenda de simbolos) va entera como
+        # zona NEUTRA: sus simbolos son ejemplos, no componentes del tablero. Marco = recuadro mas chico que la encierra.
+        for t, p in textos:
+            if 'REFERENCIAS' not in t: continue
+            C = sorted([r for r in R if dentro(p, r)], key=area)
+            if not C: continue
+            marco = C[0]
+            neut.append(fila('NEUTRA-leyenda', marco))
+            n0 = len(filas); filas = [f for f in filas if not dentro(centro(caja(f)), marco)]; tot['en_leyenda'] += n0 - len(filas)
         # RES: recortar a la fila de termomagneticas
         tm = [caja(f) for f in filas if f['block_name'] == 'TM-DIN']
         delta = collections.defaultdict(list); sin = []

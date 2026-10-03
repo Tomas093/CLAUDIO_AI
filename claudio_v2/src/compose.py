@@ -984,7 +984,7 @@ def marco_punteado(c, r, txt_h, boxes):
     return 1
 
 
-def pat_negativo(c, r, txt_h):
+def pat_negativo(c, r, txt_h, evitar=()):
     """Puestas a tierra dibujadas SIN caja. NEGATIVO.
 
     21/09 (Tomas): "el PAT no es un componente". Es el falso positivo mas confiado que queda:
@@ -1014,6 +1014,11 @@ def pat_negativo(c, r, txt_h):
         if r.random() < .5:
             put_text(c, cx + int(w * .6), y + int(txt_h * .9),
                      r.choice(['PAT', 'PE', 'TT']), int(txt_h * r.uniform(.8, 1.1)), r)
+    # 30/09 (ds22): la PAT dentro de un cuadrado con el punto de union en la esquina (LU/nyw la dibujan asi) era el
+    # FP mas confiado de RF4 con el GT v8 (0,95-0,99) y no se generaba nunca. Mismo dibujo que neg_objetos.pat_cuadrado.
+    if r.random() < float(os.environ.get('P_PAT_CUADRADO', '0')):
+        import neg_objetos
+        neg_objetos.agregar(c, r, txt_h, r.randint(1, 3), evitar=evitar, gens=[(neg_objetos.pat_cuadrado, 1)])
 
 
 def libre_de(b, evitar, m):
@@ -1322,7 +1327,7 @@ def make_tile(lib, r, negative=False):
     if r.random() < float(os.environ.get('P_CELDAS', '0')):
         tabla_celdas(cn, r, txt_h, boxes)          # siempre negativo: no agrega cajas
     if r.random() < float(os.environ.get('P_PAT', '0')):
-        pat_negativo(cn, r, txt_h)          # siempre negativo: no agrega cajas
+        pat_negativo(cn, r, txt_h, boxes)   # siempre negativo: no agrega cajas
     if r.random() < float(os.environ.get('P_NEGEXTRA', '0')):
         negativos_extra(cn, r, txt_h, boxes)       # siempre negativo: no agrega cajas
     if r.random() < float(os.environ.get('P_ROTULO_NEG', '0')):

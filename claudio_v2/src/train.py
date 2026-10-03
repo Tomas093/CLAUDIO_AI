@@ -50,6 +50,14 @@ if __name__ == '__main__':
         a.epochs = int(os.environ.get('N21_EPOCHS', '200'))
         a.hours = 0.0
         print('[train] plan N21: yolo11n | dataset %s | epocas %d' % (DS, a.epochs))
+    if a.name == 'Y26s_ds23':
+        # 30/09 (goal 0 FN < 350 FP; informe de modelos): YOLO26s (STAL: asignacion pensada para objetos chicos) con
+        # CLASE AUXILIAR de negativos duros (ds23: 1 = PAT/flecha/rotulo). A la salida solo clase 0
+        # (evaluate.py con EVAL_CLASES_FUERA=1). Pesos yolo26s.pt los baja ultralytics.
+        # 30/09: corre sobre ds23 (misma base que RF8); Y26_DS=ds24 para la variante con suciedad
+        DS = os.path.join(WORK, os.environ.get('Y26_DS', 'ds23')); a.model = 'yolo26s.pt'; a.batch = int(os.environ.get('Y26_BATCH', '8'))
+        a.epochs = int(os.environ.get('Y26_EPOCHS', '60')); a.hours = 0.0
+        print('[train] plan Y26s_ds23: yolo26s | dataset %s | epocas %d' % (DS, a.epochs))
     if a.name in ('X_26p2', 'Y_11s', 'Z_26n'):
         # 22/09. Pedido de Tomas: otras arquitecturas con EXACTAMENTE el mismo dataset, para
         # atribuir la diferencia solo al modelo. Tomas pidio corregir primero el dataset de R:

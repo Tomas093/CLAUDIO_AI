@@ -27,8 +27,13 @@ def limpiar(src, dst):
 if __name__ == '__main__':
     out = os.path.join(WORK, 'runs', os.environ.get('RFDETR_NAME', 'RF_nano'))
     os.makedirs(out, exist_ok=True)
-    pre = os.path.join(WORK, 'rfdetr', 'rf-detr-nano.pth')
-    m = RFDETRNano(pretrain_weights=pre, resolution=int(os.environ.get('RFDETR_RES', '640')))
+    # 30/09: RFDETR_PRE = pesos de partida (p.ej. RF4 limpio para ajustar sobre ds22 en vez de empezar de cero)
+    # 01/10: RFDETR_VAR=small|medium -> otra variante (pesos COCO oficiales de roboflow si no hay RFDETR_PRE)
+    var = os.environ.get('RFDETR_VAR', 'nano')
+    import rfdetr as _rf
+    Cls = {'nano': RFDETRNano, 'small': _rf.RFDETRSmall, 'medium': _rf.RFDETRMedium}[var]
+    pre = os.environ.get('RFDETR_PRE') or (os.path.join(WORK, 'rfdetr', 'rf-detr-nano.pth') if var == 'nano' else None)
+    m = Cls(**({'pretrain_weights': pre} if pre else {}), resolution=int(os.environ.get('RFDETR_RES', '640')))
     # 26/09: si la corrida se corto (se cerro la sesion y murio el proceso), retoma desde checkpoint.pth
     # (modelo, EMA, optimizer, scheduler y epoca) en vez de empezar de cero.
     ck = os.path.join(out, 'checkpoint.pth')

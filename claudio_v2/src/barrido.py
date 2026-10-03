@@ -1,7 +1,7 @@
 """Tabla FN/FP por umbral de un tag (GT_V6), con la columna que se elija como puntuacion (29/09)."""
 import os, sys, csv, importlib, numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
-os.environ.setdefault(os.environ.get('GT_BARRIDO', 'GT_V6'), '1')
+os.environ.setdefault(os.environ.get('GT_BARRIDO', 'GT_V9'), '1')
 import evaluate as ev, rescore as rs
 def cargar(tag):
     out = []
